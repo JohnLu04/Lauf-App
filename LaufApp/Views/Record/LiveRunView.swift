@@ -11,6 +11,18 @@ struct LiveRunView: View {
         VStack(spacing: 0) {
             Map(position: $position) {
                 UserAnnotation()
+                // Geplante Route unter der gelaufenen Strecke
+                if recorder.routePath.count > 1 {
+                    MapPolyline(coordinates: recorder.routePath.map(\.coordinate))
+                        .stroke(Color.blue.opacity(0.45), style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+                    if let start = recorder.routePath.first, !recorder.hasJoinedRoute {
+                        Annotation("Start", coordinate: start.coordinate, anchor: .center) {
+                            Circle().fill(.green).frame(width: 14, height: 14)
+                                .overlay(Circle().stroke(.white, lineWidth: 2))
+                        }
+                        .annotationTitles(.hidden)
+                    }
+                }
                 ForEach(Array(RunAnalysis.segments(recorder.points).enumerated()), id: \.offset) { _, segment in
                     MapPolyline(coordinates: segment.map(\.coordinate))
                         .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
@@ -40,6 +52,8 @@ struct LiveRunView: View {
             .padding(.vertical, 6)
             .background(.regularMaterial, in: Capsule())
 
+            if recorder.hasRoute { routeStatus }
+
             if let workout = recorder.plannedWorkout, !recorder.steps.isEmpty {
                 GuidedStepCard(workout: workout)
             } else if let workout = recorder.plannedWorkout {
@@ -53,6 +67,34 @@ struct LiveRunView: View {
             }
         }
         .padding()
+    }
+
+    /// Fortschritt auf der geplanten Route
+    private var routeStatus: some View {
+        let (icon, text, color): (String, String, Color) = {
+            if let toStart = recorder.distanceToRouteStart {
+                return ("location.north.line", "Zum Start der Route: \(Format.distance(toStart, decimals: toStart < 1000 ? 2 : 1))", .primary)
+            }
+            if recorder.isOffRoute {
+                return ("exclamationmark.triangle.fill", "Abseits der Route", .orange)
+            }
+            if recorder.hasJoinedRoute {
+                return ("point.topleft.down.to.point.bottomright.curvepath", "Noch \(Format.distance(recorder.routeRemaining, decimals: 2)) bis zum Ziel", .primary)
+            }
+            return ("point.topleft.down.to.point.bottomright.curvepath", recorder.routeName ?? "Route", .primary)
+        }()
+        return HStack(spacing: 8) {
+            Image(systemName: icon).foregroundStyle(color == .primary ? Color.blue : color)
+            VStack(alignment: .leading, spacing: 1) {
+                if let name = recorder.routeName {
+                    Text(name).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                }
+                Text(text).font(.subheadline.weight(.semibold)).foregroundStyle(color)
+            }
+            Spacer()
+        }
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private var metrics: some View {

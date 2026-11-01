@@ -9,6 +9,8 @@ struct RecordView: View {
     @Query(filter: #Predicate<TrainingPlan> { $0.isActive == true }) private var plans: [TrainingPlan]
     @State private var position: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var linkWorkout = true
+    @State private var selectedRoute: PlannedRoute?
+    @State private var showRoutes = false
 
     private var todaysWorkout: PlannedWorkout? { plans.first?.workout(on: .now) }
 
@@ -17,6 +19,17 @@ struct RecordView: View {
             ZStack(alignment: .bottom) {
                 Map(position: $position) {
                     UserAnnotation()
+                    if let route = selectedRoute, route.path.count > 1 {
+                        MapPolyline(coordinates: route.path.map(\.coordinate))
+                            .stroke(Color.accentColor.opacity(0.8), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                        if let start = route.path.first {
+                            Annotation("Start", coordinate: start.coordinate, anchor: .center) {
+                                Circle().fill(.green).frame(width: 14, height: 14)
+                                    .overlay(Circle().stroke(.white, lineWidth: 2))
+                            }
+                            .annotationTitles(.hidden)
+                        }
+                    }
                 }
                 .mapControls {
                     MapUserLocationButton()
@@ -30,7 +43,10 @@ struct RecordView: View {
                         if let workout = todaysWorkout {
                             todayCard(workout)
                         }
-                        gpsPill
+                        HStack(spacing: 10) {
+                            gpsPill
+                            routeButton
+                        }
                         startButton
                     }
                 }
@@ -39,6 +55,17 @@ struct RecordView: View {
             }
             .navigationTitle("Aufnehmen")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Routen", systemImage: "point.topleft.down.to.point.bottomright.curvepath") { showRoutes = true }
+                }
+            }
+            .sheet(isPresented: $showRoutes) { RoutesView(selection: $selectedRoute) }
+            .onChange(of: selectedRoute?.id) { _, _ in
+                if let route = selectedRoute, let rect = boundingRect(route.path) {
+                    withAnimation { position = .rect(rect) }
+                }
+            }
             .onAppear { recorder.startPreview() }
             .onDisappear { recorder.stopPreview() }
         }
@@ -46,7 +73,7 @@ struct RecordView: View {
 
     private var startButton: some View {
         Button {
-            recorder.start(planned: linkWorkout ? todaysWorkout : nil)
+            recorder.start(planned: linkWorkout ? todaysWorkout : nil, route: selectedRoute)
         } label: {
             Text("START")
                 .font(.title3.weight(.heavy))
@@ -54,6 +81,27 @@ struct RecordView: View {
                 .frame(width: 96, height: 96)
                 .background(Color.accentColor, in: Circle())
                 .shadow(color: .black.opacity(0.25), radius: 8, y: 4)
+        }
+    }
+
+    /// Gewählte Route oder Knopf zum Auswählen
+    private var routeButton: some View {
+        Button {
+            showRoutes = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                if let route = selectedRoute {
+                    Text("\(route.name) · \(Format.distance(route.distance, decimals: 1))").lineLimit(1)
+                } else {
+                    Text("Route wählen")
+                }
+            }
+            .font(.footnote.weight(.medium))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(.regularMaterial, in: Capsule())
+            .foregroundStyle(selectedRoute == nil ? Color.primary : Color.accentColor)
         }
     }
 

@@ -11,6 +11,12 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 - Sprachansagen auf Deutsch nach jedem Kilometer (Musik wird kurz leiser)
 - Filter gegen GPS-Sprünge und -Zittern
 
+**Routenplanung**
+- Strecke auf der Karte planen: Wegpunkte antippen, die Route folgt automatisch Fußwegen (Apple Karten), wahlweise Luftlinie
+- Rundkurs mit einem Tipp, Rückgängig, Umkehren; Distanz und geschätzte Dauer (aus deiner lockeren Pace)
+- Routen speichern, bearbeiten und vor dem Lauf auswählen
+- Beim Laufen: Route auf der Karte, „Noch x km bis zum Ziel“, Warnung bei Abweichung (Anzeige und Sprachansage)
+
 **Aktivitäten**
 - Feed mit Karten-Vorschau und Wochenübersicht
 - Detailansicht: Karte, Kilometer-Splits, Pace-Diagramm, Höhenprofil, Höhenmeter

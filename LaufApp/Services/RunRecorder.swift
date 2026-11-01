@@ -25,6 +25,18 @@ final class RunRecorder: NSObject {
     /// Aktueller Abschnitt des geplanten Workouts
     private(set) var stepIndex = 0
 
+    // Geplante Route (optional)
+    private(set) var routePath: [RouteCoordinate] = []
+    private(set) var routeName: String?
+    private(set) var routeDistance: Double = 0
+    /// Zurückgelegte Strecke entlang der Route (Meter)
+    private(set) var routeProgress: Double = 0
+    /// Schon einmal auf der Route gewesen (vorher zählt nur der Weg zum Start)
+    private(set) var hasJoinedRoute = false
+    private(set) var isOffRoute = false
+    /// Entfernung zum Startpunkt der Route, solange man noch nicht auf der Route ist
+    private(set) var distanceToRouteStart: Double?
+
     /// true, solange der Aufzeichnungsbildschirm angezeigt werden soll.
     var isSessionActive: Bool { state != .idle || finishedDraft != nil }
 
@@ -53,6 +65,9 @@ final class RunRecorder: NSObject {
     @ObservationIgnored private var lastPaceAlert: TimeInterval = 0
     @ObservationIgnored private var announcedRemaining = false
     @ObservationIgnored private var ticker: Timer?
+    @ObservationIgnored private var offRouteCount = 0
+    @ObservationIgnored private var lastRouteAlert: TimeInterval = -1000
+    @ObservationIgnored private var announcedRouteEnd = false
 
     override init() {
         super.init()
@@ -82,11 +97,16 @@ final class RunRecorder: NSObject {
         manager.stopUpdatingLocation()
     }
 
-    func start(planned: PlannedWorkout? = nil) {
+    func start(planned: PlannedWorkout? = nil, route: PlannedRoute? = nil) {
         guard state == .idle, finishedDraft == nil else { return }
         if authorizationStatus == .notDetermined { requestPermission() }
         reset()
         plannedWorkout = planned
+        if let route, route.path.count > 1 {
+            routePath = route.path
+            routeName = route.name
+            routeDistance = route.distance
+        }
         state = .running
         startDate = Date()
         segmentStart = startDate
@@ -162,11 +182,80 @@ final class RunRecorder: NSObject {
         startDate = nil
         plannedWorkout = nil
         stepIndex = 0
+        routePath = []
+        routeName = nil
+        routeDistance = 0
+        routeProgress = 0
+        hasJoinedRoute = false
+        isOffRoute = false
+        distanceToRouteStart = nil
+        offRouteCount = 0
+        lastRouteAlert = -1000
+        announcedRouteEnd = false
         stepStartDistance = 0
         stepStartTime = 0
         lastPaceAlert = 0
         announcedRemaining = false
         ticker?.invalidate()
+    }
+
+    // MARK: - Route
+
+    var hasRoute: Bool { !routePath.isEmpty }
+    var routeRemaining: Double { max(0, routeDistance - routeProgress) }
+
+    /// Fortschritt auf der Route, Warnung beim Abkommen, Ansage am Ende.
+    private func checkRoute(_ location: CLLocation) {
+        guard hasRoute, let start = routePath.first else { return }
+        let point = RouteCoordinate(location.coordinate)
+        guard let global = RouteGeometry.nearest(to: point, on: routePath) else { return }
+
+        if !hasJoinedRoute {
+            distanceToRouteStart = point.distance(to: start)
+            // Auf der Route ist man, sobald man nah am Anfang ist (bei Einstieg mittendrin: nah an der Linie)
+            guard global.distance < 30 else { return }
+            hasJoinedRoute = true
+            distanceToRouteStart = nil
+            routeProgress = RouteGeometry.nearest(to: point, on: routePath, within: 0...300)?.alongRoute ?? global.alongRoute
+            speak("Du bist auf der Route. \(spokenDistance(routeRemaining)) bis zum Ziel.")
+            return
+        }
+
+        // Fortschritt nur in der Nähe des bisherigen Fortschritts suchen (Rundkurs: Start ≠ Ziel)
+        let window = max(0, routeProgress - 150)...(routeProgress + 500)
+        if let local = RouteGeometry.nearest(to: point, on: routePath, within: window), local.distance < 40 {
+            routeProgress = max(routeProgress, local.alongRoute)
+        } else if global.distance < 25 {
+            // Abkürzung oder Wiedereinstieg weiter vorne
+            routeProgress = global.alongRoute
+        }
+
+        // Abkommen erst nach drei Messungen über 60 m melden, höchstens einmal pro Minute
+        let now = movingTime()
+        if global.distance > 60 {
+            offRouteCount += 1
+        } else if global.distance < 30 {
+            offRouteCount = 0
+        }
+        if !isOffRoute, offRouteCount >= 3 {
+            isOffRoute = true
+            if now - lastRouteAlert > 60 {
+                lastRouteAlert = now
+                speak("Du bist von der Route abgekommen. Die Route ist etwa \(Int((global.distance / 10).rounded()) * 10) Meter entfernt.")
+            }
+        } else if isOffRoute, offRouteCount == 0 {
+            isOffRoute = false
+            speak("Wieder auf der Route.")
+        }
+
+        if !announcedRouteEnd, routeDistance > 200, routeRemaining < 30 {
+            announcedRouteEnd = true
+            speak("Ende der Route erreicht.")
+        }
+    }
+
+    private func spokenDistance(_ meters: Double) -> String {
+        meters < 1000 ? "\(Int((meters / 10).rounded()) * 10) Meter" : "\(Format.kilometers(meters, decimals: 1)) Kilometer"
     }
 
     // MARK: - Geführtes Workout
@@ -312,6 +401,7 @@ final class RunRecorder: NSObject {
             updateCurrentPace()
             checkKilometer()
             updateStep()
+            checkRoute(loc)
         }
     }
 
