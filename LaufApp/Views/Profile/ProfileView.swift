@@ -1,0 +1,155 @@
+import SwiftUI
+import SwiftData
+import Charts
+
+struct ProfileView: View {
+    @Query(sort: \Run.startDate, order: .reverse) private var runs: [Run]
+    @AppStorage("voiceFeedback") private var voiceFeedback = true
+    @Environment(\.modelContext) private var context
+
+    private let cal = Calendar.mondayFirst
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    weeklyChart
+                } header: {
+                    Text("Letzte 12 Wochen")
+                }
+
+                Section("Statistik") {
+                    totalsRow("Diese Woche", since: cal.startOfWeek(for: .now))
+                    totalsRow("Dieser Monat", since: cal.dateInterval(of: .month, for: .now)?.start ?? .now)
+                    totalsRow("Dieses Jahr", since: cal.dateInterval(of: .year, for: .now)?.start ?? .now)
+                    totalsRow("Gesamt", since: .distantPast)
+                }
+
+                Section("Bestleistungen") {
+                    let records = personalRecords
+                    if records.isEmpty {
+                        Text("Lauf mindestens 400 m, um deine ersten Bestleistungen zu sehen.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(records, id: \.distance.meters) { record in
+                        NavigationLink {
+                            RunDetailView(run: record.run)
+                        } label: {
+                            HStack {
+                                Image(systemName: "medal.fill").foregroundStyle(.yellow)
+                                VStack(alignment: .leading) {
+                                    Text(record.distance.name).font(.subheadline.weight(.semibold))
+                                    Text(record.run.startDate.formatted(date: .abbreviated, time: .omitted))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                VStack(alignment: .trailing) {
+                                    Text(Format.duration(record.time)).font(.subheadline.bold()).monospacedDigit()
+                                    Text(Format.paceUnit(record.time / (Double(record.distance.meters) / 1000)))
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Section {
+                    Toggle("Sprachansagen (jeder km)", isOn: $voiceFeedback)
+                } header: {
+                    Text("Einstellungen")
+                } footer: {
+                    Text("Sagt nach jedem Kilometer Zeit und Kilometer-Split an. Musik wird dabei kurz leiser.")
+                }
+
+                #if DEBUG
+                Section {
+                    Button("Demo-Lauf hinzufügen") { context.insert(DemoData.makeRun()) }
+                } header: {
+                    Text("Entwickler")
+                } footer: {
+                    Text("Nur in Debug-Builds sichtbar. Erzeugt einen zufälligen Lauf zum Testen.")
+                }
+                #endif
+            }
+            .navigationTitle("Du")
+        }
+    }
+
+    // MARK: - Wochen-Chart
+
+    private struct WeekTotal: Identifiable {
+        let start: Date
+        let km: Double
+        var id: Date { start }
+    }
+
+    private var weeklyTotals: [WeekTotal] {
+        let thisWeek = cal.startOfWeek(for: .now)
+        return (0..<12).reversed().map { offset in
+            let start = cal.date(byAdding: .weekOfYear, value: -offset, to: thisWeek)!
+            let end = cal.date(byAdding: .weekOfYear, value: 1, to: start)!
+            let km = runs.filter { $0.startDate >= start && $0.startDate < end }.reduce(0) { $0 + $1.distance } / 1000
+            return WeekTotal(start: start, km: km)
+        }
+    }
+
+    private var weeklyChart: some View {
+        let totals = weeklyTotals
+        let average = totals.map(\.km).reduce(0, +) / Double(totals.count)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                StatView(label: "Ø pro Woche", value: average.formatted(.number.precision(.fractionLength(1))), unit: "km")
+                StatView(label: "Diese Woche", value: (totals.last?.km ?? 0).formatted(.number.precision(.fractionLength(1))), unit: "km")
+            }
+            Chart(totals) { week in
+                BarMark(x: .value("Woche", week.start, unit: .weekOfYear), y: .value("km", week.km))
+                    .foregroundStyle(Color.accentColor.gradient)
+                    .cornerRadius(3)
+            }
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .weekOfYear, count: 3)) { _ in
+                    AxisValueLabel(format: .dateTime.day().month(.abbreviated))
+                }
+            }
+            .frame(height: 160)
+        }
+        .padding(.vertical, 4)
+    }
+
+    // MARK: - Summen
+
+    private func totalsRow(_ title: String, since start: Date) -> some View {
+        let filtered = runs.filter { $0.startDate >= start }
+        return VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.subheadline.weight(.semibold))
+            HStack {
+                StatView(label: "Distanz", value: Format.kilometers(filtered.reduce(0) { $0 + $1.distance }, decimals: 1), unit: "km")
+                StatView(label: "Zeit", value: Format.duration(filtered.reduce(0) { $0 + $1.movingTime }))
+                StatView(label: "Läufe", value: "\(filtered.count)")
+                StatView(label: "Höhe", value: "\(Int(filtered.reduce(0) { $0 + $1.elevationGain }))", unit: "m")
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    // MARK: - Bestleistungen
+
+    private struct Record {
+        let distance: RunAnalysis.BestEffortDistance
+        let time: Double
+        let run: Run
+    }
+
+    private var personalRecords: [Record] {
+        RunAnalysis.bestEffortDistances.compactMap { d in
+            var best: Record?
+            for run in runs {
+                if let t = run.bestEfforts[d.meters], t < (best?.time ?? .infinity) {
+                    best = Record(distance: d, time: t, run: run)
+                }
+            }
+            return best
+        }
+    }
+}
