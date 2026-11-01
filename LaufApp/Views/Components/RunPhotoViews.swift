@@ -176,23 +176,10 @@ private struct VideoPage: View {
     let url: URL
     let isActive: Bool
     @State private var player: AVPlayer?
-    /// nil = noch unbekannt
-    @State private var hasAudio: Bool?
 
     var body: some View {
         // Der Player füllt die Fläche und zeigt das Video im richtigen Seitenverhältnis (auch Hochformat).
         VideoPlayer(player: player)
-            .overlay(alignment: .bottom) {
-                if hasAudio == false {
-                    Label("Dieses Video hat keinen Ton", systemImage: "speaker.slash.fill")
-                        .font(.caption.bold())
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(.black.opacity(0.6), in: Capsule())
-                        .padding(.bottom, 70)
-                }
-            }
             .onAppear {
                 if player == nil { player = AVPlayer(url: url) }
                 if isActive { startPlayback() }
@@ -204,10 +191,6 @@ private struct VideoPage: View {
                 player?.pause()
                 // Andere Audio-Apps (Musik, Podcasts) wieder laut stellen
                 try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            }
-            .task(id: url) {
-                let tracks = try? await AVURLAsset(url: url).loadTracks(withMediaType: .audio)
-                hasAudio = !(tracks ?? []).isEmpty
             }
     }
 
