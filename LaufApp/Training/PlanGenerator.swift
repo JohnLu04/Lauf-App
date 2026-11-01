@@ -79,15 +79,15 @@ enum PlanGenerator {
         var firstWeek = (weekday == 2 || weekday == 3)
             ? todayWeek
             : cal.date(byAdding: .weekOfYear, value: 1, to: todayWeek)!
-        let raceWeek = cal.startOfWeek(for: input.raceDate)
-        let days = cal.dateComponents([.day], from: firstWeek, to: raceWeek).day ?? 0
+        let raceWeekStart = cal.startOfWeek(for: input.raceDate)
+        let days = cal.dateComponents([.day], from: firstWeek, to: raceWeekStart).day ?? 0
         var weekCount = Int((Double(days) / 7).rounded()) + 1
 
         if weekCount < goal.minWeeks {
             throw PlanGeneratorError.tooShort(available: max(0, weekCount), required: goal.minWeeks)
         }
         if weekCount > goal.maxWeeks {
-            firstWeek = cal.date(byAdding: .weekOfYear, value: -(goal.maxWeeks - 1), to: raceWeek)!
+            firstWeek = cal.date(byAdding: .weekOfYear, value: -(goal.maxWeeks - 1), to: raceWeekStart)!
             weekCount = goal.maxWeeks
         }
 

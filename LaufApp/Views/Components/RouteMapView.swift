@@ -27,13 +27,14 @@ struct RouteMapView: View {
                 }
                 if let start = segments.first?.first {
                     Annotation("Start", coordinate: start, anchor: .center) { marker(.green) }
+                        .annotationTitles(.hidden)
                 }
                 if let end = segments.last?.last {
                     Annotation("Ziel", coordinate: end, anchor: .center) { marker(.red) }
+                        .annotationTitles(.hidden)
                 }
             }
             .mapStyle(.standard(pointsOfInterest: .excludingAll))
-            .annotationTitles(.hidden)
             .allowsHitTesting(interactive)
         }
     }
