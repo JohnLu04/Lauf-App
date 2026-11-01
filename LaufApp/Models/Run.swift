@@ -70,6 +70,8 @@ final class Run {
     /// Bewusst ohne `.externalStorage`: Ein neues Attribut mit externer Speicherung lässt sich
     /// nicht per Lightweight-Migration ergänzen ("Cannot migrate store in-place").
     var sensorData: Data = Data()
+    /// Liste der Fotos (Bilddateien liegen in `RunPhotoStore`)
+    var photosData: Data = Data()
     @Attribute(.externalStorage) var routeData: Data = Data()
     var splitsData: Data = Data()
     var bestEffortsData: Data = Data()
@@ -97,6 +99,13 @@ final class Run {
         get { (try? JSONDecoder().decode([SensorSample].self, from: sensorData)) ?? [] }
         set { sensorData = (try? JSONEncoder().encode(newValue)) ?? Data() }
     }
+
+    var photos: [RunPhoto] {
+        get { (try? JSONDecoder().decode([RunPhoto].self, from: photosData)) ?? [] }
+        set { photosData = (try? JSONEncoder().encode(newValue)) ?? Data() }
+    }
+
+    func photoURL(_ photo: RunPhoto) -> URL { RunPhotoStore.url(for: photo, runID: id) }
 
     var isFromStrava: Bool { source == "strava" }
 

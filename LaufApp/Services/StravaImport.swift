@@ -16,6 +16,8 @@ enum StravaImport {
         let averageHeartrate: Double?
         let maxHeartrate: Double?
         let averageCadence: Double?
+        /// Anzahl der Fotos (Strava und Instagram)
+        let totalPhotoCount: Int?
 
         var isRun: Bool {
             ["Run", "TrailRun", "VirtualRun"].contains(sportType ?? type) || type == "Run"
@@ -36,6 +38,29 @@ enum StravaImport {
         let cadence: Stream<Double>?
         let moving: Stream<Bool>?
     }
+
+    /// Foto aus `GET /activities/{id}/photos?photo_sources=true&size=…`.
+    struct Photo: Decodable {
+        let uniqueId: String?
+        let id: Int?
+        let urls: [String: String]?
+        let caption: String?
+        let source: Int?
+
+        var identifier: String? { uniqueId ?? id.map(String.init) }
+
+        /// Größte verfügbare Bildadresse
+        var bestURL: URL? {
+            guard let urls else { return nil }
+            let best = urls.max { (Int($0.key) ?? 0) < (Int($1.key) ?? 0) }
+            return best.flatMap { URL(string: $0.value) }
+        }
+
+        /// Strava liefert für noch nicht verarbeitete Fotos ein Platzhalterbild.
+        var isPlaceholder: Bool { bestURL?.absoluteString.contains("placeholder") ?? true }
+    }
+
+    static let photoSize = 2048
 
     static let streamKeys = "time,distance,latlng,altitude,heartrate,cadence,moving"
 

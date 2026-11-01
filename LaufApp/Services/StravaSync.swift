@@ -189,6 +189,39 @@ final class StravaSync {
         }
     }
 
+    // MARK: - Fotos
+
+    /// Lädt die Fotos einer Strava-Aktivität herunter und speichert sie beim Lauf.
+    /// Bereits vorhandene Fotos werden nicht erneut geladen. Gibt die Anzahl neuer Fotos zurück.
+    @discardableResult
+    func importPhotos(for run: Run, activityID: Int) async throws -> Int {
+        let photos: [StravaImport.Photo] = try await get("/activities/\(activityID)/photos", query: [
+            URLQueryItem(name: "photo_sources", value: "true"),
+            URLQueryItem(name: "size", value: String(StravaImport.photoSize)),
+        ]) ?? []
+        var stored = run.photos
+        let known = Set(stored.map(\.id))
+        var added = 0
+        for photo in photos where !photo.isPlaceholder {
+            guard let id = photo.identifier, !known.contains(id), let url = photo.bestURL else { continue }
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard (response as? HTTPURLResponse)?.statusCode == 200, !data.isEmpty else { continue }
+            let fileName = try RunPhotoStore.save(data, photoID: id, runID: run.id)
+            stored.append(RunPhoto(id: id, fileName: fileName, caption: photo.caption))
+            added += 1
+        }
+        if added > 0 { run.photos = stored }
+        return added
+    }
+
+    /// Holt Fotos nach, die nach dem Import bei Strava hinzugefügt wurden.
+    func refreshPhotos(for run: Run, context: ModelContext) async throws -> Int {
+        guard let activityID = run.stravaID else { return 0 }
+        let added = try await importPhotos(for: run, activityID: activityID)
+        try? context.save()
+        return added
+    }
+
     // MARK: - Import
 
     /// Synchronisiert höchstens alle 5 Minuten (z. B. beim Öffnen der App).
@@ -229,7 +262,12 @@ final class StravaSync {
                     URLQueryItem(name: "keys", value: StravaImport.streamKeys),
                     URLQueryItem(name: "key_by_type", value: "true"),
                 ])
-                context.insert(StravaImport.makeRun(activity: activity, streams: streams))
+                let run = StravaImport.makeRun(activity: activity, streams: streams)
+                context.insert(run)
+                if (activity.totalPhotoCount ?? 0) > 0 {
+                    // Fotos sind ein Extra: Fehler hier sollen den Import nicht abbrechen
+                    try? await importPhotos(for: run, activityID: activity.id)
+                }
                 try? context.save()
                 imported += 1
             }

@@ -99,9 +99,29 @@ struct RunCardView: View {
                 StatView(label: "Pace", value: Format.pace(run.averagePace), unit: "/km")
                 StatView(label: "Zeit", value: Format.duration(run.movingTime))
             }
-            RouteMapView(points: run.route)
-                .frame(height: 170)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+            let photos = run.photos
+            HStack(spacing: 6) {
+                RouteMapView(points: run.route)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if let first = photos.first {
+                    LocalPhotoView(url: run.photoURL(first), maxPixelSize: 500)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .overlay(alignment: .bottomTrailing) {
+                            if photos.count > 1 {
+                                Label("\(photos.count)", systemImage: "photo.on.rectangle")
+                                    .font(.caption2.bold())
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 3)
+                                    .background(.black.opacity(0.55), in: Capsule())
+                                    .padding(6)
+                            }
+                        }
+                        .clipped()
+                }
+            }
+            .frame(height: 170)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .card()
     }

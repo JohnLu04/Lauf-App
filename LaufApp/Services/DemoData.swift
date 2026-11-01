@@ -1,5 +1,6 @@
 #if DEBUG
 import Foundation
+import UIKit
 
 /// Erzeugt realistische Test-Läufe für den Simulator (nur Debug-Builds).
 enum DemoData {
@@ -44,6 +45,23 @@ enum DemoData {
         run.averageHeartRate = samples.compactMap(\.heartRate).reduce(0, +) / Double(max(1, samples.count))
         run.maxHeartRate = samples.compactMap(\.heartRate).max() ?? 0
         run.averageCadence = samples.compactMap(\.cadence).reduce(0, +) / Double(max(1, samples.count))
+
+        // Zwei generierte Testbilder für Galerie und Feed
+        run.photos = [("Sonnenaufgang am Staden", UIColor.systemOrange, UIColor.systemPink),
+                      ("Zieleinlauf", UIColor.systemTeal, UIColor.systemIndigo)]
+            .enumerated().compactMap { i, item in
+                let image = UIGraphicsImageRenderer(size: CGSize(width: 1200, height: 900)).image { ctx in
+                    let colors = [item.1.cgColor, item.2.cgColor] as CFArray
+                    let gradient = CGGradient(colorsSpace: nil, colors: colors, locations: [0, 1])!
+                    ctx.cgContext.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 1200, y: 900), options: [])
+                    let text = NSAttributedString(string: item.0, attributes: [
+                        .font: UIFont.boldSystemFont(ofSize: 72), .foregroundColor: UIColor.white])
+                    text.draw(at: CGPoint(x: 60, y: 760))
+                }
+                guard let data = image.jpegData(compressionQuality: 0.85),
+                      let fileName = try? RunPhotoStore.save(data, photoID: "demo-\(i)", runID: run.id) else { return nil }
+                return RunPhoto(id: "demo-\(i)", fileName: fileName, caption: item.0)
+            }
         return run
     }
 }

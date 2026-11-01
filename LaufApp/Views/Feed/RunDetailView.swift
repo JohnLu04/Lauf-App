@@ -12,6 +12,9 @@ struct RunDetailView: View {
     @State private var heartRateSeries: [RunAnalysis.SeriesPoint] = []
     @State private var cadenceSeries: [RunAnalysis.SeriesPoint] = []
     @State private var zoneTimes: [TimeInterval] = []
+    @State private var photos: [RunPhoto] = []
+    @State private var isRefreshingPhotos = false
+    @State private var photoMessage: String?
     @Query private var allRuns: [Run]
     @State private var showEdit = false
     @State private var confirmDelete = false
@@ -40,6 +43,10 @@ struct RunDetailView: View {
 
                 statsGrid.card()
 
+                if !photos.isEmpty {
+                    RunPhotoGallery(run: run, photos: photos).card()
+                }
+
                 if !run.splits.isEmpty {
                     SplitsView(splits: run.splits).card()
                 }
@@ -67,6 +74,12 @@ struct RunDetailView: View {
         .toolbar {
             Menu {
                 Button("Bearbeiten", systemImage: "pencil") { showEdit = true }
+                if run.stravaID != nil && StravaSync.shared.isConnected {
+                    Button("Fotos von Strava aktualisieren", systemImage: "photo.badge.arrow.down") {
+                        Task { await refreshPhotos() }
+                    }
+                    .disabled(isRefreshingPhotos)
+                }
                 Button("Löschen", systemImage: "trash", role: .destructive) { confirmDelete = true }
             } label: {
                 Image(systemName: "ellipsis.circle")
@@ -79,13 +92,26 @@ struct RunDetailView: View {
                 dismiss()
                 Task {
                     try? await Task.sleep(for: .milliseconds(500))
+                    RunPhotoStore.deleteAll(for: run.id)
                     context.delete(run)
                 }
             }
         } message: {
             Text("Das kann nicht rückgängig gemacht werden.")
         }
+        .overlay(alignment: .bottom) {
+            if let photoMessage {
+                Text(photoMessage)
+                    .font(.subheadline)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.bottom, 24)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
         .task {
+            photos = run.photos
             let route = run.route
             points = route
             paceSeries = RunAnalysis.paceSeries(route)
@@ -95,6 +121,22 @@ struct RunDetailView: View {
             cadenceSeries = RunAnalysis.sensorSeries(sensors) { $0.cadence }
             zoneTimes = HeartRateZones.timeInZones(sensors, maxHeartRate: HeartRateZones.maxHeartRate(runs: allRuns))
         }
+    }
+
+    private func refreshPhotos() async {
+        isRefreshingPhotos = true
+        defer { isRefreshingPhotos = false }
+        let message: String
+        do {
+            let added = try await StravaSync.shared.refreshPhotos(for: run, context: context)
+            photos = run.photos
+            message = added == 0 ? "Keine neuen Fotos." : (added == 1 ? "1 Foto hinzugefügt." : "\(added) Fotos hinzugefügt.")
+        } catch {
+            message = error.localizedDescription
+        }
+        withAnimation { photoMessage = message }
+        try? await Task.sleep(for: .seconds(2.5))
+        withAnimation { photoMessage = nil }
     }
 
     private var statsGrid: some View {
