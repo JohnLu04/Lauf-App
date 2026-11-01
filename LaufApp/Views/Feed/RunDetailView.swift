@@ -9,6 +9,10 @@ struct RunDetailView: View {
     @State private var points: [RoutePoint] = []
     @State private var paceSeries: [RunAnalysis.SeriesPoint] = []
     @State private var elevationSeries: [RunAnalysis.SeriesPoint] = []
+    @State private var heartRateSeries: [RunAnalysis.SeriesPoint] = []
+    @State private var cadenceSeries: [RunAnalysis.SeriesPoint] = []
+    @State private var zoneTimes: [TimeInterval] = []
+    @Query private var allRuns: [Run]
     @State private var showEdit = false
     @State private var confirmDelete = false
 
@@ -24,6 +28,11 @@ struct RunDetailView: View {
                     Text(run.startDate.formatted(date: .complete, time: .shortened))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                    if run.isFromStrava {
+                        Label("Von Strava importiert", systemImage: "applewatch")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     if !run.notes.isEmpty {
                         Text(run.notes).padding(.top, 4)
                     }
@@ -36,6 +45,13 @@ struct RunDetailView: View {
                 }
                 if !paceSeries.isEmpty {
                     PaceChart(series: paceSeries, average: run.averagePace).card()
+                }
+                if heartRateSeries.count > 2 {
+                    HeartRateCard(series: heartRateSeries, average: run.averageHeartRate, maximum: run.maxHeartRate,
+                                  zoneTimes: zoneTimes, maxHeartRate: HeartRateZones.maxHeartRate(runs: allRuns)).card()
+                }
+                if cadenceSeries.count > 2 {
+                    CadenceChart(series: cadenceSeries, average: run.averageCadence).card()
                 }
                 if elevationSeries.count > 2 {
                     ElevationChart(series: elevationSeries).card()
@@ -74,6 +90,10 @@ struct RunDetailView: View {
             points = route
             paceSeries = RunAnalysis.paceSeries(route)
             elevationSeries = RunAnalysis.elevationSeries(route)
+            let sensors = run.sensorSamples
+            heartRateSeries = RunAnalysis.sensorSeries(sensors) { $0.heartRate }
+            cadenceSeries = RunAnalysis.sensorSeries(sensors) { $0.cadence }
+            zoneTimes = HeartRateZones.timeInZones(sensors, maxHeartRate: HeartRateZones.maxHeartRate(runs: allRuns))
         }
     }
 
@@ -86,6 +106,14 @@ struct RunDetailView: View {
             GridRow {
                 StatView(label: "Bewegungszeit", value: Format.duration(run.movingTime), large: true)
                 StatView(label: "Höhenmeter", value: "\(Int(run.elevationGain.rounded()))", unit: "m", large: true)
+            }
+            if run.averageHeartRate > 0 || run.averageCadence > 0 {
+                GridRow {
+                    StatView(label: "Ø Herzfrequenz", value: run.averageHeartRate > 0 ? "\(Int(run.averageHeartRate.rounded()))" : "–",
+                             unit: "bpm", large: true)
+                    StatView(label: "Ø Schrittfrequenz", value: run.averageCadence > 0 ? "\(Int(run.averageCadence.rounded()))" : "–",
+                             unit: "spm", large: true)
+                }
             }
             GridRow {
                 StatView(label: "Gesamtzeit", value: Format.duration(run.elapsedTime))
@@ -188,6 +216,111 @@ struct PaceChart: View {
                 }
             }
             .frame(height: 180)
+        }
+    }
+}
+
+struct HeartRateCard: View {
+    let series: [RunAnalysis.SeriesPoint]
+    let average: Double
+    let maximum: Double
+    let zoneTimes: [TimeInterval]
+    let maxHeartRate: Double
+
+    private static let zoneColors: [Color] = [.gray, .blue, .green, .orange, .red]
+
+    var body: some View {
+        let total = zoneTimes.reduce(0, +)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Herzfrequenz").font(.headline)
+                Spacer()
+                if maximum > 0 {
+                    Text("max. \(Int(maximum.rounded())) bpm").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Chart {
+                ForEach(series) { p in
+                    LineMark(x: .value("Distanz", p.km), y: .value("bpm", p.value))
+                        .interpolationMethod(.catmullRom)
+                        .foregroundStyle(.red)
+                }
+                if average > 0 {
+                    RuleMark(y: .value("Ø", average))
+                        .foregroundStyle(.secondary)
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                        .annotation(position: .top, alignment: .trailing) {
+                            Text("Ø \(Int(average.rounded()))").font(.caption2).foregroundStyle(.secondary)
+                        }
+                }
+            }
+            .chartYScale(domain: .automatic(includesZero: false))
+            .chartXAxis {
+                AxisMarks { value in
+                    AxisGridLine()
+                    AxisValueLabel { if let v = value.as(Double.self) { Text("\(v.formatted()) km") } }
+                }
+            }
+            .frame(height: 160)
+
+            if total > 0 {
+                Text("Zeit in Zonen").font(.subheadline.weight(.semibold)).padding(.top, 4)
+                ForEach(HeartRateZones.zones.reversed()) { zone in
+                    let time = zoneTimes[zone.index - 1]
+                    HStack(spacing: 8) {
+                        Text("Z\(zone.index)").font(.caption.bold()).frame(width: 24, alignment: .leading)
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Text(zone.name).font(.caption)
+                                Text("\(Int(zone.lower * maxHeartRate))–\(Int(zone.upper * maxHeartRate))")
+                                    .font(.caption2).foregroundStyle(.secondary)
+                                Spacer()
+                                Text(Format.duration(time)).font(.caption.monospacedDigit())
+                            }
+                            GeometryReader { geo in
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(Self.zoneColors[zone.index - 1])
+                                    .frame(width: max(4, geo.size.width * time / total))
+                            }
+                            .frame(height: 8)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct CadenceChart: View {
+    let series: [RunAnalysis.SeriesPoint]
+    let average: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Schrittfrequenz").font(.headline)
+            Chart {
+                ForEach(series) { p in
+                    PointMark(x: .value("Distanz", p.km), y: .value("spm", p.value))
+                        .symbolSize(12)
+                        .foregroundStyle(.purple)
+                }
+                if average > 0 {
+                    RuleMark(y: .value("Ø", average))
+                        .foregroundStyle(.secondary)
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                        .annotation(position: .top, alignment: .trailing) {
+                            Text("Ø \(Int(average.rounded())) spm").font(.caption2).foregroundStyle(.secondary)
+                        }
+                }
+            }
+            .chartYScale(domain: .automatic(includesZero: false))
+            .chartXAxis {
+                AxisMarks { value in
+                    AxisGridLine()
+                    AxisValueLabel { if let v = value.as(Double.self) { Text("\(v.formatted()) km") } }
+                }
+            }
+            .frame(height: 140)
         }
     }
 }

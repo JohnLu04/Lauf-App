@@ -48,8 +48,9 @@ enum RunAnalysis {
     }
 
     /// Kilometer-Splits mit interpolierter Zeit an jeder km-Grenze.
-    static func splits(_ points: [RoutePoint]) -> [Split] {
-        let s = samples(points)
+    static func splits(_ points: [RoutePoint]) -> [Split] { splits(samples: samples(points)) }
+
+    static func splits(samples s: [Sample]) -> [Split] {
         guard s.count > 1 else { return [] }
         var splits: [Split] = []
         var splitStartDist = 0.0, splitStartTime = 0.0
@@ -77,8 +78,9 @@ enum RunAnalysis {
     }
 
     /// Schnellste Zeit für jede Standard-Distanz, die im Lauf enthalten ist.
-    static func bestEfforts(_ points: [RoutePoint]) -> [Int: Double] {
-        let s = samples(points)
+    static func bestEfforts(_ points: [RoutePoint]) -> [Int: Double] { bestEfforts(samples: samples(points)) }
+
+    static func bestEfforts(samples s: [Sample]) -> [Int: Double] {
         guard let total = s.last?.distance else { return [:] }
         var result: [Int: Double] = [:]
         for target in bestEffortDistances where Double(target.meters) <= total {
@@ -135,6 +137,27 @@ enum RunAnalysis {
             if let alt = sample.altitude { result.append(SeriesPoint(km: sample.distance / 1000, value: alt)) }
             next = sample.distance + step
         }
+        return result
+    }
+
+    /// Herzfrequenz oder Schrittfrequenz über die Distanz, gemittelt je `step` Meter.
+    static func sensorSeries(_ samples: [SensorSample], step: Double = 100,
+                             value: (SensorSample) -> Double?) -> [SeriesPoint] {
+        var result: [SeriesPoint] = []
+        var binEnd = step, sum = 0.0, count = 0
+        for sample in samples {
+            while sample.distance > binEnd {
+                if count > 0 { result.append(SeriesPoint(km: (binEnd - step / 2) / 1000, value: sum / Double(count))) }
+                binEnd += step
+                sum = 0
+                count = 0
+            }
+            if let v = value(sample), v > 0 {
+                sum += v
+                count += 1
+            }
+        }
+        if count > 0 { result.append(SeriesPoint(km: (binEnd - step / 2) / 1000, value: sum / Double(count))) }
         return result
     }
 

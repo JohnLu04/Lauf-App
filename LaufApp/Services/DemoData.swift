@@ -29,8 +29,22 @@ enum DemoData {
 
         let draft = RunDraft(startDate: start, endDate: time, movingTime: time.timeIntervalSince(start),
                              distance: 0, points: points, plannedWorkoutID: nil)
-        return RunAnalysis.makeRun(from: draft, title: RunAnalysis.defaultTitle(for: start),
-                                   notes: "Demo-Lauf", effort: Int.random(in: 3...7))
+        let run = RunAnalysis.makeRun(from: draft, title: RunAnalysis.defaultTitle(for: start),
+                                      notes: "Demo-Lauf", effort: Int.random(in: 3...7))
+
+        // Simulierte Uhr-Daten: Herzfrequenz steigt langsam an (Drift), Schrittfrequenz um 170 spm
+        let samples = RunAnalysis.samples(points).enumerated().map { i, s -> SensorSample in
+            let progress = s.time / max(1, run.movingTime)
+            let hr = min(185, 128 + 20 * min(1, s.time / 300) + 12 * progress + 4 * sin(Double(i) / 40)
+                + Double.random(in: -2...2))
+            let cadence = 168 + 4 * sin(Double(i) / 60) + Double.random(in: -3...3)
+            return SensorSample(distance: s.distance, time: s.time, heartRate: hr.rounded(), cadence: cadence.rounded())
+        }
+        run.sensorSamples = samples
+        run.averageHeartRate = samples.compactMap(\.heartRate).reduce(0, +) / Double(max(1, samples.count))
+        run.maxHeartRate = samples.compactMap(\.heartRate).max() ?? 0
+        run.averageCadence = samples.compactMap(\.cadence).reduce(0, +) / Double(max(1, samples.count))
+        return run
     }
 }
 #endif

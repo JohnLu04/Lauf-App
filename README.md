@@ -30,6 +30,12 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 - Export in die Kalender-App: eigener Kalender „LaufApp Training“, ganztägig oder mit Uhrzeit und Erinnerung; wird bei Änderungen am Plan automatisch aktualisiert
 - Erkennt die App aus deinen Läufen eine bessere Form, schlägt sie neue Paces vor und zeigt eine aktualisierte Prognose
 
+**Garmin & Strava**
+- Läufe deiner Garmin-Uhr automatisch übernehmen: Garmin Connect → Strava → LaufApp
+- Herzfrequenz-Verlauf mit Zeit in den 5 Herzfrequenzzonen, Schrittfrequenz-Verlauf, Route, Splits und Höhe
+- Einrichtung mit Schritt-für-Schritt-Anleitung im Profil unter „Strava & Garmin“ (eigene, kostenlose Strava-API-Anwendung; das Client-Secret liegt nur im Schlüsselbund)
+- Bereits mit der App aufgezeichnete Läufe werden nicht doppelt importiert
+
 **Du (Profil)**
 - Wochen-Diagramm der letzten 12 Wochen
 - Summen für Woche, Monat, Jahr und gesamt

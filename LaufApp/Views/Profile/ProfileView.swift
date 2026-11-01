@@ -5,6 +5,7 @@ import Charts
 struct ProfileView: View {
     @Query(sort: \Run.startDate, order: .reverse) private var runs: [Run]
     @AppStorage("voiceFeedback") private var voiceFeedback = true
+    @AppStorage(HeartRateZones.maxHeartRateKey) private var storedMaxHeartRate = 0.0
     @Environment(\.modelContext) private var context
 
     private let cal = Calendar.mondayFirst
@@ -55,11 +56,32 @@ struct ProfileView: View {
                 }
 
                 Section {
+                    NavigationLink {
+                        StravaSettingsView()
+                    } label: {
+                        LabeledContent {
+                            Text(StravaSync.shared.isConnected ? "Verbunden" : "Nicht verbunden")
+                        } label: {
+                            Label("Strava & Garmin", systemImage: "applewatch")
+                        }
+                    }
+                } header: {
+                    Text("Verbindungen")
+                } footer: {
+                    Text("Läufe deiner Garmin-Uhr automatisch übernehmen, mit Herzfrequenz und Schrittfrequenz.")
+                }
+
+                Section {
                     Toggle("Sprachansagen (jeder km)", isOn: $voiceFeedback)
+                    Stepper(value: Binding(get: { HeartRateZones.maxHeartRate(runs: runs) },
+                                           set: { storedMaxHeartRate = $0 }),
+                            in: 140...220) {
+                        LabeledContent("Max. Herzfrequenz", value: "\(Int(HeartRateZones.maxHeartRate(runs: runs))) bpm")
+                    }
                 } header: {
                     Text("Einstellungen")
                 } footer: {
-                    Text("Sagt nach jedem Kilometer Zeit und Kilometer-Split an. Musik wird dabei kurz leiser.")
+                    Text("Sprachansagen: Zeit und Kilometer-Split nach jedem Kilometer, Musik wird kurz leiser. Die maximale Herzfrequenz bestimmt deine Herzfrequenzzonen; ohne Angabe wird der höchste gemessene Wert verwendet.")
                 }
 
                 #if DEBUG
