@@ -201,17 +201,40 @@ final class StravaSync {
             URLQueryItem(name: "photo_sources", value: "true"),
             URLQueryItem(name: "size", value: String(StravaImport.photoSize)),
         ]) ?? []
+        return try await mergePhotos(photos, into: run)
+    }
+
+    /// Gleicht die Strava-Liste mit den gespeicherten Einträgen ab: lädt neue Fotos/Videos,
+    /// stellt fehlende Dateien wieder her und ergänzt Video-Informationen.
+    func mergePhotos(_ photos: [StravaImport.Photo], into run: Run) async throws -> Int {
         var stored = run.photos
         var changed = 0
         for photo in photos where !photo.isPlaceholder {
             guard let id = photo.identifier else { continue }
             if let index = stored.firstIndex(where: { $0.id == id }) {
-                // Vorhandener Eintrag: nur Video-Informationen ergänzen
-                guard photo.isVideo, stored[index].videoFileName == nil else { continue }
                 let before = stored[index]
-                stored[index].isVideo = true
-                await attachVideo(photo, to: &stored[index], runID: run.id)
-                if stored[index] != before { changed += 1 }
+                var restoredImage = false
+                // Fehlende Bilddatei neu laden (z. B. nach einer Neuinstallation der App)
+                let imageURL = RunPhotoStore.url(for: stored[index], runID: run.id)
+                if !FileManager.default.fileExists(atPath: imageURL.path), let url = photo.bestURL {
+                    let (data, response) = try await URLSession.shared.data(from: url)
+                    if (response as? HTTPURLResponse)?.statusCode == 200, !data.isEmpty {
+                        stored[index].fileName = try RunPhotoStore.save(data, photoID: id, runID: run.id)
+                        restoredImage = true
+                    }
+                }
+                // Video-Informationen ergänzen bzw. fehlende Videodatei neu laden
+                if photo.isVideo {
+                    stored[index].isVideo = true
+                    let videoMissing = stored[index].videoFileName.map {
+                        !FileManager.default.fileExists(atPath: RunPhotoStore.folder(for: run.id).appending(path: $0).path)
+                    } ?? true
+                    if videoMissing {
+                        stored[index].videoFileName = nil
+                        await attachVideo(photo, to: &stored[index], runID: run.id)
+                    }
+                }
+                if restoredImage || stored[index] != before { changed += 1 }
                 continue
             }
             guard let url = photo.bestURL else { continue }
@@ -247,6 +270,23 @@ final class StravaSync {
             // Download fehlgeschlagen: wenigstens streamen versuchen
             entry.videoRemoteURL = videoURL.absoluteString
         }
+    }
+
+    /// Lädt fehlende Bild- und Videodateien aller Strava-Läufe neu.
+    /// Gibt die Anzahl der Läufe zurück, bei denen etwas wiederhergestellt wurde.
+    func repairMissingPhotos(context: ModelContext) async -> (repaired: Int, failed: Int) {
+        let runs = (try? context.fetch(FetchDescriptor<Run>())) ?? []
+        var repaired = 0, failed = 0
+        for run in runs where run.stravaID != nil && run.hasMissingPhotoFiles {
+            guard let activityID = run.stravaID else { continue }
+            if (try? await importPhotos(for: run, activityID: activityID)) != nil, !run.hasMissingPhotoFiles {
+                repaired += 1
+            } else {
+                failed += 1
+            }
+        }
+        try? context.save()
+        return (repaired, failed)
     }
 
     /// Holt Fotos nach, die nach dem Import bei Strava hinzugefügt wurden.

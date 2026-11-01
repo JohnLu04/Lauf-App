@@ -113,6 +113,9 @@ final class Run {
         return photo.videoRemoteURL.flatMap(URL.init(string:))
     }
 
+    /// Fotos oder Videos, deren Dateien fehlen (z. B. nach einer Neuinstallation)
+    var hasMissingPhotoFiles: Bool { photos.contains { RunPhotoStore.isMissing($0, runID: id) } }
+
     /// Lauf auf strava.com bzw. in der Strava-App (Universal Link)
     var stravaURL: URL? { stravaID.flatMap { URL(string: "https://www.strava.com/activities/\($0)") } }
 

@@ -55,6 +55,16 @@ enum RunPhotoStore {
         return fileName
     }
 
+    /// Fehlt die Bilddatei (bzw. bei Videos die heruntergeladene Videodatei)?
+    static func isMissing(_ photo: RunPhoto, runID: UUID) -> Bool {
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: url(for: photo, runID: runID).path) { return true }
+        if let video = photo.videoFileName, !fm.fileExists(atPath: folder(for: runID).appending(path: video).path) {
+            return true
+        }
+        return false
+    }
+
     static func deleteAll(for runID: UUID) {
         try? FileManager.default.removeItem(at: folder(for: runID))
     }

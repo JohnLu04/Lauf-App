@@ -13,6 +13,8 @@ struct StravaSettingsView: View {
     @State private var isConnecting = false
     @State private var errorMessage: String?
     @State private var confirmDisconnect = false
+    @State private var isRepairing = false
+    @State private var repairMessage: String?
 
     private let apiSettingsURL = URL(string: "https://www.strava.com/settings/api")!
 
@@ -77,6 +79,24 @@ struct StravaSettingsView: View {
             .disabled(strava.isSyncing)
         } footer: {
             Text("Neue Läufe werden beim Öffnen der App automatisch geholt. Läufe, die du schon mit LaufApp aufgezeichnet hast, werden nicht doppelt importiert.")
+        }
+
+        Section {
+            Button {
+                Task { await repair() }
+            } label: {
+                HStack {
+                    Label("Fehlende Fotos & Videos neu laden", systemImage: "photo.badge.arrow.down")
+                    Spacer()
+                    if isRepairing { ProgressView() }
+                }
+            }
+            .disabled(isRepairing || strava.isSyncing)
+            if let repairMessage {
+                Text(repairMessage).font(.subheadline).foregroundStyle(.secondary)
+            }
+        } footer: {
+            Text("Prüft alle importierten Läufe und lädt Bilder und Videos, deren Dateien fehlen (z. B. nach einer Neuinstallation der App), erneut von Strava.")
         }
 
         Section {
@@ -151,6 +171,17 @@ struct StravaSettingsView: View {
             .disabled(clientID.isEmpty || clientSecret.isEmpty || isConnecting)
         } header: {
             Text("Schritt 4")
+        }
+    }
+
+    private func repair() async {
+        isRepairing = true
+        defer { isRepairing = false }
+        let result = await strava.repairMissingPhotos(context: context)
+        switch (result.repaired, result.failed) {
+        case (0, 0): repairMessage = "Alle Fotos und Videos sind vorhanden."
+        case (let r, 0): repairMessage = r == 1 ? "Bei 1 Lauf wiederhergestellt." : "Bei \(r) Läufen wiederhergestellt."
+        case (let r, let f): repairMessage = "Bei \(r) Läufen wiederhergestellt, bei \(f) Läufen fehlt noch etwas. Versuch es später noch einmal."
         }
     }
 

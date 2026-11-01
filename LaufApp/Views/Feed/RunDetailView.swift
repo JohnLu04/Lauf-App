@@ -13,6 +13,8 @@ struct RunDetailView: View {
     @State private var cadenceSeries: [RunAnalysis.SeriesPoint] = []
     @State private var zoneTimes: [TimeInterval] = []
     @State private var photos: [RunPhoto] = []
+    /// Wird nach dem Neuladen von Dateien erhöht, damit die Galerie die Bilder neu liest
+    @State private var photoRevision = 0
     @State private var isRefreshingPhotos = false
     @State private var photoMessage: String?
     @Query private var allRuns: [Run]
@@ -44,7 +46,9 @@ struct RunDetailView: View {
                 statsGrid.card()
 
                 if !photos.isEmpty {
-                    RunPhotoGallery(run: run, photos: photos).card()
+                    RunPhotoGallery(run: run, photos: photos)
+                        .id(photoRevision)
+                        .card()
                 }
 
                 if !run.splits.isEmpty {
@@ -112,6 +116,10 @@ struct RunDetailView: View {
         }
         .task {
             photos = run.photos
+            // Fehlende Bilddateien (z. B. nach einer Neuinstallation) automatisch neu laden
+            if run.stravaID != nil, StravaSync.shared.isConnected, run.hasMissingPhotoFiles {
+                Task { await refreshPhotos(silentIfNothingChanged: true) }
+            }
             let route = run.route
             points = route
             paceSeries = RunAnalysis.paceSeries(route)
@@ -123,15 +131,24 @@ struct RunDetailView: View {
         }
     }
 
-    private func refreshPhotos() async {
+    private func refreshPhotos(silentIfNothingChanged: Bool = false) async {
         isRefreshingPhotos = true
         defer { isRefreshingPhotos = false }
         let message: String
         do {
             let added = try await StravaSync.shared.refreshPhotos(for: run, context: context)
             photos = run.photos
-            message = added == 0 ? "Keine neuen Fotos oder Videos." : (added == 1 ? "1 Foto/Video aktualisiert." : "\(added) Fotos/Videos aktualisiert.")
+            photoRevision += 1
+            if added == 0 && silentIfNothingChanged { return }
+            if added == 0 {
+                message = run.hasMissingPhotoFiles
+                    ? "Einige Dateien konnten nicht von Strava geladen werden."
+                    : "Keine neuen Fotos oder Videos."
+            } else {
+                message = added == 1 ? "1 Foto/Video aktualisiert." : "\(added) Fotos/Videos aktualisiert."
+            }
         } catch {
+            if silentIfNothingChanged { return }
             message = error.localizedDescription
         }
         withAnimation { photoMessage = message }
