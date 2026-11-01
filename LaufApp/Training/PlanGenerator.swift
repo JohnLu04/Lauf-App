@@ -36,7 +36,8 @@ enum PlanGeneratorError: LocalizedError {
 /// - Phasen: Grundlage → Aufbau → wettkampfspezifisch → Tapering
 /// - Umfang steigt höchstens ~10 % pro Woche, jede 4. Woche ist eine Entlastungswoche
 /// - Schwellenumfang ≈ 10 %, Intervallumfang ≈ 8 %, R-Umfang ≈ 5 % des Wochenumfangs
-/// - Langer Lauf ≈ 25–35 % des Wochenumfangs, gedeckelt je nach Zieldistanz
+/// - Langer Lauf steigt gleichmäßig bis zur zieltypischen Spitzenlänge (5 km: 10 km … Marathon: 32 km)
+///   und ist immer der längste Lauf der Woche; lockere Läufe bleiben bei höchstens 75 % davon
 enum PlanGenerator {
     private enum Slot { case quality1, quality2, easy, long }
 
@@ -56,6 +57,7 @@ enum PlanGenerator {
         var phase: TrainingPhase
         var isRecovery: Bool
         var volume: Double        // Meter
+        var longRun: Double       // Meter
         var paces: TrainingPaces
         var goalPace: Double      // s/km
         var runs: Int
@@ -96,6 +98,7 @@ enum PlanGenerator {
         let goalPace = input.goalTime / (goal.distance / 1000)
         let volumes = weeklyVolumes(goal: goal, weekCount: weekCount,
                                     currentKm: input.currentWeeklyKm, runs: runs)
+        let longRuns = longRunDistances(goal: goal, volumes: volumes, runs: runs)
         let trainingWeeks = weekCount - goal.taperWeeks
 
         var weeks: [PlanWeek] = []
@@ -112,8 +115,10 @@ enum PlanGenerator {
             let progress = Double(w) / Double(max(1, weekCount - 1))
             let trainVDOT = min(input.currentVDOT + (goalVDOT - input.currentVDOT) * progress,
                                 input.currentVDOT + Double(w) / 4)
+            // Der Wochenumfang muss groß genug sein, dass der lange Lauf nicht zu viel davon ausmacht.
+            let volume = max(volumes[w].km * 1000, longRuns[w] / maxLongShare(runs: runs))
             let ctx = WeekContext(index: w, goal: goal, phase: phase, isRecovery: volumes[w].recovery,
-                                  volume: volumes[w].km * 1000,
+                                  volume: volume, longRun: longRuns[w],
                                   paces: VDOT.paces(vdot: max(input.currentVDOT, trainVDOT)),
                                   goalPace: goalPace, runs: runs)
             let workouts = w == weekCount - 1
@@ -133,7 +138,9 @@ enum PlanGenerator {
         let trainingWeeks = weekCount - goal.taperWeeks
         let startKm = max(currentKm, Double(runs) * 4)
         let typicalPeak = goal.typicalPeakKm * Double(runs) / 5
-        let peakKm = min(max(typicalPeak, startKm), startKm * 1.6)
+        // Längere Pläne lassen mehr Steigerung zu (bei 10 % pro Woche abzüglich Entlastungswochen).
+        let maxGrowth = min(2.0, 1 + 0.08 * Double(trainingWeeks))
+        let peakKm = min(max(typicalPeak, startKm), startKm * maxGrowth)
 
         var result: [(km: Double, recovery: Bool)] = []
         var lastBuildKm = startKm
@@ -158,6 +165,49 @@ enum PlanGenerator {
         return result
     }
 
+    /// Höchster Anteil des langen Laufs am Wochenumfang.
+    private static func maxLongShare(runs: Int) -> Double {
+        switch runs {
+        case ...3: 0.50
+        case 4: 0.45
+        case 5: 0.40
+        default: 0.35
+        }
+    }
+
+    /// Länge des langen Laufs pro Woche (Meter). Sie steigt in den Aufbauwochen gleichmäßig
+    /// vom aktuellen Niveau bis zur Spitzenlänge des Ziels, höchstens um `longRunStep` pro Woche.
+    /// Entlastungswochen ≈ 70 %, im Tapering wird schrittweise reduziert.
+    /// Die Wettkampfwoche hat keinen langen Lauf (0).
+    static func longRunDistances(goal: RaceGoal, volumes: [(km: Double, recovery: Bool)], runs: Int) -> [Double] {
+        let weekCount = volumes.count
+        let trainingWeeks = weekCount - goal.taperWeeks
+        let startShare = runs <= 3 ? 0.35 : (runs == 4 ? 0.30 : 0.27)
+        let start = roundHalfKm(min(max(volumes[0].km * 1000 * startShare, 5000), goal.longRunPeak))
+        let buildWeeks = (0..<trainingWeeks).filter { !volumes[$0].recovery }
+
+        var result = [Double](repeating: 0, count: weekCount)
+        var last = start
+        var buildIndex = 0
+        for i in 0..<trainingWeeks {
+            if volumes[i].recovery {
+                result[i] = max(5000, roundHalfKm(last * 0.7))
+                continue
+            }
+            let progress = buildWeeks.count > 1 ? Double(buildIndex) / Double(buildWeeks.count - 1) : 1
+            let target = start + (goal.longRunPeak - start) * progress
+            last = buildIndex == 0 ? start : roundHalfKm(min(target, last + goal.longRunStep))
+            result[i] = last
+            buildIndex += 1
+        }
+        // Tapering (ohne Wettkampfwoche): 75 %, dann 55 % der zuletzt gelaufenen Länge
+        let taperFactors: [Double] = [0.75, 0.55]
+        for (j, f) in taperFactors.prefix(goal.taperWeeks - 1).enumerated() {
+            result[trainingWeeks + j] = max(5000, roundHalfKm(last * f))
+        }
+        return result
+    }
+
     // MARK: - Wochen
 
     private static func regularWeek(start: Date, ctx: WeekContext, cal: Calendar) -> [PlannedWorkout] {
@@ -169,8 +219,7 @@ enum PlanGenerator {
         if ctx.runs <= 3, ctx.index % 2 == 1, let alternative = q2 { q1 = alternative }
         if ctx.runs <= 3 { q2 = nil }
 
-        let longFraction = ctx.runs <= 3 ? 0.35 : (ctx.runs == 4 ? 0.30 : 0.27)
-        let longDist = roundHalfKm(min(max(ctx.volume * longFraction, 6000), ctx.goal.longRunCap))
+        let longDist = ctx.longRun
 
         // Wie viele Einheiten bekommen die Distanz eines lockeren Laufs?
         var easyCount = pat.filter { $0.slot == .easy }.count
@@ -181,7 +230,11 @@ enum PlanGenerator {
         }
 
         let remaining = ctx.volume - longDist - qualityDist
-        let easyDist = roundHalfKm(max(3000, remaining / Double(max(1, easyCount))))
+        // Lockere Läufe liegen bei 40 % (ab 5 Läufen 25 %) bis 75 % des langen Laufs, auch wenn dadurch
+        // der Wochenumfang etwas vom Zielwert abweicht.
+        let easyCap = (longDist * 0.75 / 500).rounded(.down) * 500
+        let easyFloor = max(3000, roundHalfKm(longDist * (ctx.runs >= 5 ? 0.25 : 0.4)))
+        let easyDist = min(roundHalfKm(max(easyFloor, remaining / Double(max(1, easyCount)))), max(easyFloor, easyCap))
 
         return pat.map { (day: Int, slot: Slot) -> PlannedWorkout in
             let date = cal.date(byAdding: .day, value: day, to: start)!
@@ -261,6 +314,11 @@ enum PlanGenerator {
 
     // MARK: - Bausteine
 
+    /// Tempoeinheiten (inkl. Ein- und Auslaufen) bleiben kürzer als der lange Lauf.
+    private static func qualityLimit(_ ctx: WeekContext) -> Double {
+        max(6000, ctx.longRun - 1000)
+    }
+
     private static func easyRange(_ p: TrainingPaces) -> String {
         "\(Format.pace(p.easyFast))–\(Format.pace(p.easySlow))"
     }
@@ -295,7 +353,8 @@ enum PlanGenerator {
     }
 
     private static func threshold(_ ctx: WeekContext) -> Spec {
-        let tKm = min(10, max(3, (ctx.volumeKm * 0.10).rounded()))
+        let limitKm = qualityLimit(ctx) / 1000
+        let tKm = min(10, max(3, (ctx.volumeKm * 0.10).rounded()), max(2, (limitKm - 4).rounded(.down)))
         let t = Format.pace(ctx.paces.threshold)
         if tKm <= 5 {
             return Spec(kind: .threshold, title: "Tempodauerlauf",
@@ -308,7 +367,7 @@ enum PlanGenerator {
                         """,
                         distance: (tKm + 4) * 1000)
         }
-        let n = Int((tKm / 2).rounded())
+        let n = min(Int((tKm / 2).rounded()), Int((limitKm - 4) / 2.2))
         return Spec(kind: .threshold, title: "Schwellenintervalle",
                     details: """
                     2 km einlaufen (locker)
@@ -321,7 +380,8 @@ enum PlanGenerator {
     private static func intervals(_ ctx: WeekContext) -> Spec {
         let iKm = min(8, max(3, ctx.volumeKm * 0.08))
         let rep = iKm >= 5 ? 1000.0 : 800.0
-        let n = max(3, Int((iKm * 1000 / rep).rounded()))
+        let n = max(3, min(Int((iKm * 1000 / rep).rounded()),
+                           Int((qualityLimit(ctx) - 4000) / (rep + 400))))
         let repTime = ctx.paces.interval * rep / 1000
         return Spec(kind: .intervals, title: "VO2max-Intervalle",
                     details: """
@@ -336,7 +396,7 @@ enum PlanGenerator {
     private static func repetition(_ ctx: WeekContext) -> Spec {
         let rKm = min(5, max(2, ctx.volumeKm * 0.05))
         let rep = rKm >= 3 ? 400.0 : 200.0
-        let n = Int(rKm * 1000 / rep)
+        let n = max(6, min(Int(rKm * 1000 / rep), Int((qualityLimit(ctx) - 4000) / (2 * rep))))
         let repTime = ctx.paces.repetition * rep / 1000
         return Spec(kind: .repetition, title: "Tempowiederholungen",
                     details: """
@@ -353,7 +413,7 @@ enum PlanGenerator {
     private static func racePace(_ ctx: WeekContext, short: Bool) -> Spec {
         let gp = Format.pace(ctx.goalPace)
         let title = short ? "Tempo-Schärfung" : "Wettkampftempo"
-        let reps: Int, repDist: Double, pause: String
+        var reps: Int, repDist: Double, pause: String
         switch ctx.goal {
         case .fiveK:
             reps = short ? 3 : 5; repDist = 1000; pause = "2 min Trabpause"
@@ -362,7 +422,8 @@ enum PlanGenerator {
         case .half:
             reps = short ? 2 : 3; repDist = (short || ctx.volumeKm < 45) ? 3000 : 5000; pause = "3 min Trabpause"
         case .marathon:
-            let mKm = short ? 6 : min(16, max(8, (ctx.volumeKm * 0.2).rounded()))
+            let mKm = short ? 6 : min(16, max(8, (ctx.volumeKm * 0.2).rounded()),
+                                      max(6, (qualityLimit(ctx) / 1000 - 4).rounded(.down)))
             return Spec(kind: .racePace, title: title,
                         details: """
                         2 km einlaufen (locker)
@@ -371,6 +432,7 @@ enum PlanGenerator {
                         """,
                         distance: (mKm + 4) * 1000)
         }
+        reps = max(2, min(reps, Int((qualityLimit(ctx) - 4000) / (repDist + 400))))
         let repText = repDist >= 1000 ? "\(Format.kilometers(repDist, decimals: 0)) km" : "\(Int(repDist)) m"
         return Spec(kind: .racePace, title: title,
                     details: """

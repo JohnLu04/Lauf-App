@@ -52,13 +52,23 @@ enum RaceGoal: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    /// Maximale Länge des langen Laufs (Meter).
-    var longRunCap: Double {
+    /// Spitzenlänge des langen Laufs (Meter), auf die der Plan hinarbeitet.
+    var longRunPeak: Double {
         switch self {
-        case .fiveK: 14000
-        case .tenK: 18000
-        case .half: 22000
+        case .fiveK: 10000
+        case .tenK: 14000
+        case .half: 20000
         case .marathon: 32000
+        }
+    }
+
+    /// Größte Steigerung des langen Laufs von einer Aufbauwoche zur nächsten (Meter).
+    var longRunStep: Double {
+        switch self {
+        case .fiveK: 1000
+        case .tenK: 1500
+        case .half: 2000
+        case .marathon: 2500
         }
     }
 
