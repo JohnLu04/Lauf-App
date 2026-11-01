@@ -32,6 +32,13 @@ enum Format {
 
     static func elevation(_ meters: Double) -> String { "\(Int(meters.rounded())) m" }
 
+    /// Gesprochene Pace, z.B. "5 Minuten 30 pro Kilometer"
+    static func spokenPace(_ secondsPerKm: Double) -> String {
+        let total = Int(secondsPerKm.rounded())
+        let m = total / 60, s = total % 60
+        return s == 0 ? "\(m) Minuten pro Kilometer" : "\(m) Minuten \(s) pro Kilometer"
+    }
+
     /// Gesprochene Zeit, z.B. "5 Minuten 30" oder "1 Stunde 5 Minuten"
     static func spokenDuration(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded())
@@ -52,6 +59,20 @@ extension Calendar {
         cal.firstWeekday = 2
         cal.minimumDaysInFirstWeek = 4
         return cal
+    }
+
+    /// Wochentag als Index 0 = Montag … 6 = Sonntag.
+    func weekdayIndex(of date: Date) -> Int {
+        (component(.weekday, from: date) + 5) % 7
+    }
+
+    /// Kurzname des Wochentags für Index 0 = Montag … 6 = Sonntag ("Mo", "Di", …).
+    static func weekdayShortName(_ index: Int) -> String {
+        ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"][index]
+    }
+
+    static func weekdayName(_ index: Int) -> String {
+        ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"][index]
     }
 
     func startOfWeek(for date: Date) -> Date {

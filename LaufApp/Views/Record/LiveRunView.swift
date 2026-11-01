@@ -40,7 +40,9 @@ struct LiveRunView: View {
             .padding(.vertical, 6)
             .background(.regularMaterial, in: Capsule())
 
-            if let workout = recorder.plannedWorkout {
+            if let workout = recorder.plannedWorkout, !recorder.steps.isEmpty {
+                GuidedStepCard(workout: workout)
+            } else if let workout = recorder.plannedWorkout {
                 VStack(alignment: .leading, spacing: 4) {
                     Label(workout.title, systemImage: workout.kind.symbol).font(.subheadline.bold())
                     Text(workout.details).font(.caption).foregroundStyle(.secondary).lineLimit(3)
@@ -113,5 +115,73 @@ struct LiveRunView: View {
             }
         }
         .sensoryFeedback(.impact, trigger: recorder.state)
+    }
+}
+
+
+/// Aktueller Abschnitt eines geführten Workouts mit Zielpace und Restdistanz/-zeit.
+struct GuidedStepCard: View {
+    @Environment(RunRecorder.self) private var recorder
+    let workout: PlannedWorkout
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label(workout.title, systemImage: workout.kind.symbol)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("\(min(recorder.stepIndex + 1, recorder.steps.count))/\(recorder.steps.count)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                if let step = recorder.currentStep {
+                    HStack(alignment: .firstTextBaseline) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(step.label).font(.headline)
+                            if let pace = step.paceText {
+                                Text("Ziel: \(pace)").font(.subheadline.monospacedDigit())
+                                    .foregroundStyle(paceColor(step))
+                            }
+                        }
+                        Spacer()
+                        Text(recorder.stepRemainingText(at: context.date))
+                            .font(.title2.bold().monospacedDigit())
+                    }
+                    ProgressView(value: recorder.stepProgress(at: context.date))
+                        .tint(step.kind == .recovery ? .gray : .accentColor)
+                    HStack {
+                        if let next = recorder.nextStep {
+                            Text("Danach: \(next.label) · \(next.amountText)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Button("Überspringen", systemImage: "forward.end.fill") { recorder.skipStep() }
+                            .font(.caption.weight(.semibold))
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
+                } else {
+                    Label("Workout geschafft!", systemImage: "checkmark.seal.fill")
+                        .font(.headline)
+                        .foregroundStyle(.green)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        }
+    }
+
+    /// Grün im Zielbereich, Orange bei Abweichung.
+    private func paceColor(_ step: WorkoutStep) -> Color {
+        guard let fast = step.paceFast, let slow = step.paceSlow, recorder.currentPace > 0 else { return .primary }
+        let easy = slow - fast >= 15
+        if recorder.currentPace < fast * 0.98 { return .orange }
+        if !easy, recorder.currentPace > slow * 1.02 { return .orange }
+        return .green
     }
 }

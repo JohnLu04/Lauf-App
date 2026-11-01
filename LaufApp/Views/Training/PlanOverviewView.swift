@@ -8,6 +8,13 @@ struct PlanOverviewView: View {
     @Query private var runs: [Run]
     @Environment(\.modelContext) private var context
     @State private var confirmDelete = false
+    @State private var showAdjust = false
+
+    /// Form aus den letzten Läufen, wenn sie spürbar besser ist als die des Plans.
+    private var improvedVDOT: Double? {
+        guard let estimate = VDOT.estimate(from: runs), estimate >= plan.formVDOT + 0.5 else { return nil }
+        return estimate
+    }
 
     var body: some View {
         let weeks = plan.weeks
@@ -17,12 +24,26 @@ struct PlanOverviewView: View {
             List {
                 Section { header(weeks: weeks) }
 
+                if let improvedVDOT {
+                    Section { formBanner(improvedVDOT) }
+                }
+
+                if let next = plan.nextWorkout(runs: runs) {
+                    Section(Calendar.current.isDateInToday(next.date) ? "Heute" : "Nächste Einheit") {
+                        NavigationLink {
+                            WorkoutDetailView(plan: plan, workout: next)
+                        } label: {
+                            NextWorkoutCard(workout: next)
+                        }
+                    }
+                }
+
                 Section {
-                    PacesView(paces: VDOT.paces(vdot: plan.startVDOT))
+                    PacesView(paces: VDOT.paces(vdot: plan.formVDOT))
                 } header: {
                     Text("Deine Trainingspaces")
                 } footer: {
-                    Text("Basierend auf VDOT \(plan.startVDOT.formatted(.number.precision(.fractionLength(1)))). Die Paces in den einzelnen Einheiten steigen im Laufe des Plans langsam an.")
+                    Text("Basierend auf VDOT \(plan.formVDOT.formatted(.number.precision(.fractionLength(1)))). Die Paces in den einzelnen Einheiten steigen im Laufe des Plans langsam an.")
                 }
 
                 Section("Umfang pro Woche") {
@@ -35,7 +56,8 @@ struct PlanOverviewView: View {
                             NavigationLink {
                                 WorkoutDetailView(plan: plan, workout: workout)
                             } label: {
-                                WorkoutRow(workout: workout, done: plan.isCompleted(workout, runs: runs))
+                                WorkoutRow(workout: workout, done: plan.isCompleted(workout, runs: runs),
+                                           skipped: plan.isSkipped(workout))
                             }
                         }
                     } header: {
@@ -50,6 +72,7 @@ struct PlanOverviewView: View {
         }
         .toolbar {
             Menu {
+                Button("Plan anpassen", systemImage: "slider.horizontal.3") { showAdjust = true }
                 Button("Neuen Plan erstellen", systemImage: "plus", action: onNewPlan)
                 Button("Plan löschen", systemImage: "trash", role: .destructive) { confirmDelete = true }
             } label: {
@@ -59,6 +82,23 @@ struct PlanOverviewView: View {
         .confirmationDialog("Trainingsplan löschen?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Löschen", role: .destructive) { context.delete(plan) }
         }
+        .sheet(isPresented: $showAdjust) {
+            PlanAdjustView(plan: plan, suggestedVDOT: VDOT.estimate(from: runs))
+        }
+    }
+
+    private func formBanner(_ vdot: Double) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Du bist in Form!", systemImage: "chart.line.uptrend.xyaxis")
+                .font(.headline)
+                .foregroundStyle(.green)
+            Text("Deine letzten Läufe deuten auf VDOT \(vdot.formatted(.number.precision(.fractionLength(1)))) hin (Plan: \(plan.formVDOT.formatted(.number.precision(.fractionLength(1))))). Neue Prognose für \(plan.goal.name): \(Format.duration(VDOT.predictTime(distance: plan.goal.distance, vdot: vdot))).")
+                .font(.subheadline)
+            Button("Paces aktualisieren") { showAdjust = true }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+        }
+        .padding(.vertical, 4)
     }
 
     private func header(weeks: [PlanWeek]) -> some View {
@@ -81,7 +121,7 @@ struct PlanOverviewView: View {
             HStack {
                 StatView(label: "Zielzeit", value: Format.duration(plan.goalTime))
                 StatView(label: "Zielpace", value: Format.pace(plan.goalPace), unit: "/km")
-                StatView(label: "Wochen", value: "\(weeks.count)")
+                StatView(label: "Prognose", value: Format.duration(VDOT.predictTime(distance: plan.goal.distance, vdot: plan.formVDOT)))
             }
             VStack(alignment: .leading, spacing: 4) {
                 ProgressView(value: Double(done), total: Double(max(1, all.count)))
@@ -137,6 +177,7 @@ struct PlanOverviewView: View {
 struct WorkoutRow: View {
     let workout: PlannedWorkout
     let done: Bool
+    var skipped = false
 
     private var isPast: Bool { workout.date < Calendar.current.startOfDay(for: .now) }
 
@@ -148,7 +189,7 @@ struct WorkoutRow: View {
                 .frame(width: 32, height: 32)
                 .background(workout.kind.color, in: Circle())
             VStack(alignment: .leading, spacing: 2) {
-                Text(workout.title).font(.subheadline.weight(.semibold))
+                Text(workout.title).font(.subheadline.weight(.semibold)).strikethrough(skipped)
                 Text(workout.date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))
                     .font(.caption)
                     .foregroundStyle(Calendar.current.isDateInToday(workout.date) ? Color.accentColor : .secondary)
@@ -157,10 +198,10 @@ struct WorkoutRow: View {
             Text(Format.distance(workout.distance, decimals: 1))
                 .font(.subheadline.monospacedDigit())
                 .foregroundStyle(.secondary)
-            Image(systemName: done ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(done ? .green : Color(.tertiaryLabel))
+            Image(systemName: done ? "checkmark.circle.fill" : (skipped ? "forward.circle" : "circle"))
+                .foregroundStyle(done ? .green : (skipped ? .orange : Color(.tertiaryLabel)))
         }
-        .opacity(isPast && !done ? 0.5 : 1)
+        .opacity((isPast && !done) || skipped ? 0.5 : 1)
     }
 }
 
@@ -189,5 +230,68 @@ struct PacesView: View {
             Spacer()
             Text("\(pace) /km").font(.subheadline.monospacedDigit())
         }
+    }
+}
+
+
+/// Hervorgehobene Karte für die nächste geplante Einheit.
+struct NextWorkoutCard: View {
+    let workout: PlannedWorkout
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Image(systemName: workout.kind.symbol)
+                    .font(.title3)
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(workout.kind.color, in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(workout.title).font(.headline)
+                    Text(workout.date.formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(Format.distance(workout.distance, decimals: 1))
+                    .font(.headline.monospacedDigit())
+            }
+            if let steps = workout.steps, steps.count > 1 {
+                Text(WorkoutStepSummary.text(steps))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+enum WorkoutStepSummary {
+    /// Kurzfassung, z.B. "2,0 km Einlaufen · 5 × 1 km @ 4:30 · 2,0 km Auslaufen"
+    static func text(_ steps: [WorkoutStep]) -> String {
+        var parts: [String] = []
+        var i = 0
+        let main = steps.filter { $0.kind == .run }
+        while i < steps.count {
+            let step = steps[i]
+            switch step.kind {
+            case .warmup, .cooldown:
+                parts.append("\(step.amountText) \(step.kind.name)")
+            case .recovery:
+                break
+            case .run:
+                // gleiche Wiederholungen zusammenfassen
+                let same = main.filter { $0.distance == step.distance && $0.duration == step.duration && $0.paceFast == step.paceFast }
+                if same.count > 1 {
+                    parts.append("\(same.count) × \(step.amountText)" + (step.paceText.map { " @ \($0)" } ?? ""))
+                    while i + 1 < steps.count, steps[i + 1].kind != .cooldown { i += 1 }
+                } else {
+                    parts.append("\(step.amountText) \(step.label)" + (step.paceText.map { " @ \($0)" } ?? ""))
+                }
+            }
+            i += 1
+        }
+        return parts.joined(separator: " · ")
     }
 }

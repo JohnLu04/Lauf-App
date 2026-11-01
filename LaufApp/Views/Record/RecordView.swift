@@ -78,7 +78,7 @@ struct RecordView: View {
                 Spacer()
                 Text(Format.distance(workout.distance, decimals: 1)).font(.subheadline).foregroundStyle(.secondary)
             }
-            Text(workout.details)
+            Text(workout.steps.map { WorkoutStepSummary.text($0) } ?? workout.details)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(4)

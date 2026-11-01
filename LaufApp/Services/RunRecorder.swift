@@ -4,6 +4,7 @@ import Observation
 import AVFoundation
 
 /// Zeichnet einen Lauf per GPS auf: Distanz, Zeit, Pace, Route und Kilometer-Ansagen.
+/// Bei strukturierten Workouts führt er per Sprache durch die Abschnitte und meldet Abweichungen von der Zielpace.
 @MainActor
 @Observable
 final class RunRecorder: NSObject {
@@ -21,6 +22,8 @@ final class RunRecorder: NSObject {
     private(set) var finishedDraft: RunDraft?
     /// Geplantes Workout, das gerade gelaufen wird (optional).
     private(set) var plannedWorkout: PlannedWorkout?
+    /// Aktueller Abschnitt des geplanten Workouts
+    private(set) var stepIndex = 0
 
     /// true, solange der Aufzeichnungsbildschirm angezeigt werden soll.
     var isSessionActive: Bool { state != .idle || finishedDraft != nil }
@@ -45,6 +48,11 @@ final class RunRecorder: NSObject {
     @ObservationIgnored private var announcedKm = 0
     @ObservationIgnored private var lastKmTime: TimeInterval = 0
     @ObservationIgnored private let speech = AVSpeechSynthesizer()
+    @ObservationIgnored private var stepStartDistance: Double = 0
+    @ObservationIgnored private var stepStartTime: TimeInterval = 0
+    @ObservationIgnored private var lastPaceAlert: TimeInterval = 0
+    @ObservationIgnored private var announcedRemaining = false
+    @ObservationIgnored private var ticker: Timer?
 
     override init() {
         super.init()
@@ -86,6 +94,8 @@ final class RunRecorder: NSObject {
         manager.showsBackgroundLocationIndicator = true
         manager.startUpdatingLocation()
         speak("Aufzeichnung gestartet.")
+        if let first = currentStep { announce(first) }
+        startTicker()
     }
 
     func pause() {
@@ -96,6 +106,7 @@ final class RunRecorder: NSObject {
         lastAccepted = nil
         currentPace = 0
         state = .paused
+        ticker?.invalidate()
         speak("Pausiert.")
     }
 
@@ -103,6 +114,7 @@ final class RunRecorder: NSObject {
         guard state == .paused else { return }
         segmentStart = Date()
         state = .running
+        startTicker()
         speak("Weiter geht's.")
     }
 
@@ -110,6 +122,7 @@ final class RunRecorder: NSObject {
     func finish() {
         guard state != .idle else { return }
         if state == .running { pause() }
+        ticker?.invalidate()
         manager.stopUpdatingLocation()
         manager.allowsBackgroundLocationUpdates = false
         finishedDraft = RunDraft(startDate: startDate ?? Date(), endDate: Date(),
@@ -148,6 +161,127 @@ final class RunRecorder: NSObject {
         lastKmTime = 0
         startDate = nil
         plannedWorkout = nil
+        stepIndex = 0
+        stepStartDistance = 0
+        stepStartTime = 0
+        lastPaceAlert = 0
+        announcedRemaining = false
+        ticker?.invalidate()
+    }
+
+    // MARK: - Geführtes Workout
+
+    var steps: [WorkoutStep] { plannedWorkout?.steps ?? [] }
+    var currentStep: WorkoutStep? { steps.indices.contains(stepIndex) ? steps[stepIndex] : nil }
+    var nextStep: WorkoutStep? { steps.indices.contains(stepIndex + 1) ? steps[stepIndex + 1] : nil }
+    var isWorkoutComplete: Bool { !steps.isEmpty && stepIndex >= steps.count }
+
+    /// Fortschritt im aktuellen Abschnitt (0…1).
+    func stepProgress(at date: Date = Date()) -> Double {
+        guard let step = currentStep else { return 1 }
+        if let d = step.distance, d > 0 { return min(1, (distance - stepStartDistance) / d) }
+        if let t = step.duration, t > 0 { return min(1, (movingTime(at: date) - stepStartTime) / t) }
+        return 0
+    }
+
+    /// Verbleibende Strecke oder Zeit im aktuellen Abschnitt, z.B. "350 m" oder "1:20".
+    func stepRemainingText(at date: Date = Date()) -> String {
+        guard let step = currentStep else { return "" }
+        if let d = step.distance {
+            let rest = max(0, d - (distance - stepStartDistance))
+            return rest < 1000 ? "\(Int(rest)) m" : Format.distance(rest, decimals: 2)
+        }
+        if let t = step.duration { return Format.duration(max(0, t - (movingTime(at: date) - stepStartTime))) }
+        return ""
+    }
+
+    /// Springt zum nächsten Abschnitt (z.B. wenn die Pause kürzer sein soll).
+    func skipStep() {
+        guard currentStep != nil else { return }
+        advanceStep()
+    }
+
+    private func startTicker() {
+        ticker?.invalidate()
+        guard !steps.isEmpty else { return }
+        ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateStep() }
+        }
+    }
+
+    private func updateStep() {
+        guard state == .running, let step = currentStep else { return }
+        let t = movingTime()
+        let inStepDistance = distance - stepStartDistance
+        let inStepTime = t - stepStartTime
+        if let d = step.distance, inStepDistance >= d { advanceStep(); return }
+        if let dur = step.duration, inStepTime >= dur { advanceStep(); return }
+
+        if !announcedRemaining {
+            if let d = step.distance, d >= 600, step.kind != .cooldown, d - inStepDistance <= 200 {
+                announcedRemaining = true
+                speak("Noch 200 Meter.")
+            } else if let dur = step.duration, dur >= 60, dur - inStepTime <= 10 {
+                announcedRemaining = true
+                speak("Noch 10 Sekunden.")
+            }
+        }
+        checkPace(step, inStepTime: inStepTime, now: t)
+    }
+
+    private func advanceStep() {
+        stepIndex += 1
+        stepStartDistance = distance
+        stepStartTime = movingTime()
+        lastPaceAlert = stepStartTime
+        announcedRemaining = false
+        if let step = currentStep {
+            announce(step)
+        } else {
+            speak("Workout geschafft, super gemacht! Du kannst jetzt beenden oder locker weiterlaufen.")
+        }
+    }
+
+    private func announce(_ step: WorkoutStep) {
+        var text = "\(step.label). \(spokenAmount(step))"
+        if let fast = step.paceFast, let slow = step.paceSlow {
+            text += slow - fast < 15
+                ? " im Tempo \(Format.spokenPace((fast + slow) / 2))."
+                : ", locker zwischen \(Format.pace(fast).replacingOccurrences(of: ":", with: " Minuten ")) und \(Format.spokenPace(slow))."
+        } else if step.kind == .run {
+            text += ", zügig."
+        } else {
+            text += "."
+        }
+        if step.kind == .recovery, let next = nextStep {
+            text += " Danach: \(next.label)."
+        }
+        speak(text)
+    }
+
+    private func spokenAmount(_ step: WorkoutStep) -> String {
+        if let d = step.distance {
+            return d < 1000 ? "\(Int(d)) Meter" : "\(Format.kilometers(d, decimals: d.truncatingRemainder(dividingBy: 1000) == 0 ? 0 : 1)) Kilometer"
+        }
+        if let t = step.duration {
+            return t < 60 ? "\(Int(t)) Sekunden" : Format.spokenDuration(t)
+        }
+        return ""
+    }
+
+    /// Meldet sich höchstens alle 45 s, wenn die Pace außerhalb des Zielbereichs liegt.
+    /// Bei lockeren Bereichen (breiter als 15 s) nur, wenn man zu schnell ist.
+    private func checkPace(_ step: WorkoutStep, inStepTime: TimeInterval, now: TimeInterval) {
+        guard let fast = step.paceFast, let slow = step.paceSlow, currentPace > 0,
+              inStepTime > 20, now - lastPaceAlert > 45 else { return }
+        let isEasy = slow - fast >= 15
+        if currentPace < fast * 0.98 {
+            lastPaceAlert = now
+            speak(isEasy ? "Etwas langsamer, ganz locker bleiben." : "Etwas langsamer. Ziel: \(Format.spokenPace((fast + slow) / 2)).")
+        } else if !isEasy, currentPace > slow * 1.02 {
+            lastPaceAlert = now
+            speak("Etwas schneller. Ziel: \(Format.spokenPace((fast + slow) / 2)).")
+        }
     }
 
     // MARK: - GPS-Verarbeitung
@@ -177,6 +311,7 @@ final class RunRecorder: NSObject {
                                      altitude: altitude, timestamp: loc.timestamp, segment: segment))
             updateCurrentPace()
             checkKilometer()
+            updateStep()
         }
     }
 

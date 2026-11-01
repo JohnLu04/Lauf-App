@@ -23,7 +23,10 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 - Phasen: Grundlage → Aufbau → wettkampfspezifisch → Tapering
 - Umfang steigt höchstens ca. 10 % pro Woche, jede 4. Woche ist eine Entlastungswoche
 - Workouts werden automatisch abgehakt, wenn du am selben Tag läufst
-- Ein geplantes Workout lässt sich direkt starten und wird während des Laufs angezeigt
+- Bei der Planerstellung wählst du Trainingstage, den Tag für den langen Lauf und deinen gewünschten Wochenumfang; reicht er für dein Ziel nicht, warnt die App
+- Strukturierte Workouts (Einlaufen, Intervalle, Pausen, Auslaufen) mit Sprachführung: Ansage jedes Abschnitts, „Noch 200 Meter“, Hinweise bei zu schneller oder zu langsamer Pace
+- Einheiten verschieben oder überspringen, Plan jederzeit anpassen (Tage, Umfang, Form), ohne Vergangenes zu verlieren
+- Erkennt die App aus deinen Läufen eine bessere Form, schlägt sie neue Paces vor und zeigt eine aktualisierte Prognose
 
 **Du (Profil)**
 - Wochen-Diagramm der letzten 12 Wochen

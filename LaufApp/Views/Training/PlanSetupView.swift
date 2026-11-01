@@ -11,7 +11,11 @@ struct PlanSetupView: View {
     @State private var goal: RaceGoal = .tenK
     @State private var raceDate = Calendar.current.date(byAdding: .weekOfYear, value: 12, to: .now) ?? .now
     @State private var runsPerWeek = 4
+    @State private var trainingDays: Set<Int> = [1, 3, 5, 6]
+    @State private var longRunDay = 6
     @State private var weeklyKm = 20.0
+    @State private var targetKm = 30.0
+    @State private var targetEdited = false
     @State private var refDistance: RaceGoal = .fiveK
     @State private var refTime: TimeInterval = 30 * 60
     @State private var useGoalTime = false
@@ -33,6 +37,18 @@ struct PlanSetupView: View {
 
     private var effectiveGoalTime: TimeInterval { useGoalTime ? goalTime : recommendedGoalTime }
     private var goalVDOT: Double { VDOT.vdot(distance: goal.distance, time: effectiveGoalTime) }
+
+    /// Vorschlag für den Wochenumfang: typischer Umfang für Ziel und Läufe pro Woche, mindestens die Empfehlung.
+    private var suggestedTargetKm: Double {
+        let typical = goal.typicalPeakKm * Double(runsPerWeek) / 5
+        return (max(goal.recommendedMinWeeklyKm, typical, weeklyKm) / 5).rounded() * 5
+    }
+
+    private var input: PlanInput {
+        PlanInput(goal: goal, raceDate: raceDate, currentWeeklyKm: weeklyKm, targetWeeklyKm: targetKm,
+                  runsPerWeek: runsPerWeek, trainingDays: trainingDays, longRunDay: longRunDay,
+                  currentVDOT: currentVDOT, goalTime: effectiveGoalTime)
+    }
 
     var body: some View {
         NavigationStack {
@@ -59,13 +75,12 @@ struct PlanSetupView: View {
                     Text("Eine aktuelle Wettkampf- oder Bestzeit (nicht älter als ca. 6 Wochen) oder eine ehrliche Schätzung. Daraus werden deine Trainingspaces berechnet.")
                 }
 
-                Section("Trainingsumfang") {
-                    Stepper("Läufe pro Woche: \(runsPerWeek)", value: $runsPerWeek, in: 3...6)
-                    VStack(alignment: .leading) {
-                        Text("Aktueller Wochenumfang: \(Int(weeklyKm)) km")
-                        Slider(value: $weeklyKm, in: 0...120, step: 5)
-                    }
-                }
+                TrainingScheduleSection(runsPerWeek: $runsPerWeek, trainingDays: $trainingDays, longRunDay: $longRunDay)
+
+                WeeklyVolumeSection(currentKm: $weeklyKm, targetKm: $targetKm,
+                                    recommendedKm: goal.recommendedMinWeeklyKm,
+                                    warnings: PlanGenerator.warnings(for: input),
+                                    onTargetEdited: { targetEdited = true })
 
                 Section {
                     Toggle("Eigene Zielzeit festlegen", isOn: $useGoalTime)
@@ -95,7 +110,11 @@ struct PlanSetupView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Abbrechen") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Erstellen") { create() }.bold() }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Erstellen") { create() }
+                        .bold()
+                        .disabled(trainingDays.count < runsPerWeek)
+                }
             }
             .onAppear(perform: prefill)
             .onChange(of: useGoalTime) { _, on in
@@ -103,6 +122,13 @@ struct PlanSetupView: View {
             }
             .onChange(of: goal) { _, _ in
                 if useGoalTime { goalTime = recommendedGoalTime.rounded() }
+                if !targetEdited { targetKm = suggestedTargetKm }
+            }
+            .onChange(of: runsPerWeek) { _, _ in
+                if !targetEdited { targetKm = suggestedTargetKm }
+            }
+            .onChange(of: weeklyKm) { _, _ in
+                if !targetEdited { targetKm = suggestedTargetKm }
             }
         }
     }
@@ -125,19 +151,15 @@ struct PlanSetupView: View {
         let fourWeeksAgo = Calendar.current.date(byAdding: .day, value: -28, to: .now)!
         let km = runs.filter { $0.startDate > fourWeeksAgo }.reduce(0) { $0 + $1.distance } / 1000 / 4
         if km > 0 { weeklyKm = min(120, (km / 5).rounded() * 5) }
+        targetKm = suggestedTargetKm
     }
 
     private func create() {
-        let input = PlanInput(goal: goal, raceDate: raceDate, currentWeeklyKm: weeklyKm,
-                              runsPerWeek: runsPerWeek, currentVDOT: currentVDOT,
-                              goalTime: effectiveGoalTime)
+        let input = input
         do {
             let result = try PlanGenerator.generate(input)
             activePlans.forEach { $0.isActive = false }
-            let plan = TrainingPlan(goal: goal, raceDate: raceDate, goalTime: effectiveGoalTime,
-                                    startVDOT: currentVDOT, goalVDOT: result.goalVDOT,
-                                    runsPerWeek: runsPerWeek, weeks: result.weeks)
-            context.insert(plan)
+            context.insert(TrainingPlan(input: input, generated: result))
             try? context.save()
             dismiss()
         } catch {
