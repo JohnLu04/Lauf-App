@@ -75,14 +75,14 @@ enum DemoData {
         return run
     }
 
-    /// Erzeugt ein 4-Sekunden-Testvideo (Farbverlauf mit wanderndem Balken) im Ordner des Laufs.
+    /// Erzeugt ein 4-Sekunden-Testvideo im Hochformat (Farbfläche mit wanderndem Quadrat) im Ordner des Laufs.
     private static func makeTestVideo(id: String, runID: UUID) -> String? {
         let fileName = id + "-video.mp4"
         let folder = RunPhotoStore.folder(for: runID)
         let url = folder.appending(path: fileName)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try? FileManager.default.removeItem(at: url)
-        let size = CGSize(width: 640, height: 360)
+        let size = CGSize(width: 360, height: 640)  // Hochformat wie beim Handy-Video
         guard let writer = try? AVAssetWriter(outputURL: url, fileType: .mp4) else { return nil }
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: size.width, AVVideoHeightKey: size.height])
@@ -107,7 +107,7 @@ enum DemoData {
                 ctx.setFillColor(UIColor(hue: 0.35 + 0.25 * t, saturation: 0.7, brightness: 0.8, alpha: 1).cgColor)
                 ctx.fill(CGRect(origin: .zero, size: size))
                 ctx.setFillColor(UIColor.white.cgColor)
-                ctx.fill(CGRect(x: t * (size.width - 80), y: 140, width: 80, height: 80))
+                ctx.fill(CGRect(x: 140, y: t * (size.height - 80), width: 80, height: 80))
             }
             CVPixelBufferUnlockBaseAddress(buffer, [])
             adaptor.append(buffer, withPresentationTime: CMTime(value: CMTimeValue(frame), timescale: fps))

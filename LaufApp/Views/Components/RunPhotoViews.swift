@@ -102,18 +102,23 @@ struct PhotoViewer: View {
             Color.black.ignoresSafeArea()
             TabView(selection: $selection) {
                 ForEach(photos) { photo in
-                    VStack {
-                        Spacer()
-                        if photo.video, let videoURL = run.videoURL(photo) {
-                            VideoPage(url: videoURL, isActive: selection == photo)
-                        } else {
-                            LocalPhotoView(url: run.photoURL(photo), maxPixelSize: 2400, contentMode: .fit,
-                                           background: .black)
-                                .overlay {
-                                    if photo.video { videoOnlyInStrava }
-                                }
+                    // Bild bzw. Video bekommt die ganze verfügbare Höhe; das Seitenverhältnis
+                    // (auch Hochformat) bleibt erhalten, der Rest wird schwarz aufgefüllt.
+                    VStack(spacing: 12) {
+                        Group {
+                            if photo.video, let videoURL = run.videoURL(photo) {
+                                VideoPage(url: videoURL, isActive: selection == photo)
+                            } else {
+                                LocalPhotoView(url: run.photoURL(photo), maxPixelSize: 2400, contentMode: .fit,
+                                               background: .black)
+                                    .overlay {
+                                        if photo.video { videoOnlyInStrava }
+                                    }
+                            }
                         }
-                        Spacer()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        // Platz für den Schließen-Knopf, damit er die Player-Bedienelemente nicht verdeckt
+                        .padding(.top, 64)
                         if let caption = photo.caption, !caption.isEmpty {
                             Text(caption)
                                 .font(.subheadline)
@@ -173,8 +178,8 @@ private struct VideoPage: View {
     @State private var player: AVPlayer?
 
     var body: some View {
+        // Der Player füllt die Fläche und zeigt das Video im richtigen Seitenverhältnis (auch Hochformat).
         VideoPlayer(player: player)
-            .aspectRatio(16 / 9, contentMode: .fit)
             .onAppear {
                 if player == nil { player = AVPlayer(url: url) }
                 if isActive { player?.play() }
