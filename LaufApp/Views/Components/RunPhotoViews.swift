@@ -1,4 +1,5 @@
 import SwiftUI
+import AVKit
 
 /// Lädt ein lokal gespeichertes Foto verkleinert im Hintergrund.
 struct LocalPhotoView: View {
@@ -33,15 +34,39 @@ struct LocalPhotoView: View {
     }
 }
 
-/// Fotogalerie in der Laufansicht; Antippen öffnet die Vollbildansicht.
+/// Play-Symbol über dem Standbild eines Videos.
+struct VideoBadge: View {
+    var size: CGFloat = 44
+
+    var body: some View {
+        Image(systemName: "play.fill")
+            .font(.system(size: size * 0.4, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(.black.opacity(0.45), in: Circle())
+            .accessibilityHidden(true)
+    }
+}
+
+/// Galerie in der Laufansicht; Antippen öffnet die Vollbildansicht.
 struct RunPhotoGallery: View {
     let run: Run
     let photos: [RunPhoto]
     @State private var selection: RunPhoto?
 
+    private var title: String {
+        let videos = photos.filter(\.video).count
+        let images = photos.count - videos
+        switch (images, videos) {
+        case (_, 0): return images == 1 ? "Foto" : "Fotos (\(images))"
+        case (0, _): return videos == 1 ? "Video" : "Videos (\(videos))"
+        default: return "Fotos & Videos (\(photos.count))"
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(photos.count == 1 ? "Foto" : "Fotos (\(photos.count))").font(.headline)
+            Text(title).font(.headline)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(photos) { photo in
@@ -50,10 +75,11 @@ struct RunPhotoGallery: View {
                         } label: {
                             LocalPhotoView(url: run.photoURL(photo), maxPixelSize: 500)
                                 .frame(width: photos.count == 1 ? 300 : 150, height: 150)
+                                .overlay { if photo.video { VideoBadge() } }
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel(photo.caption ?? "Foto")
+                        .accessibilityLabel((photo.video ? "Video" : "Foto") + (photo.caption.map { ": \($0)" } ?? ""))
                     }
                 }
             }
@@ -64,7 +90,7 @@ struct RunPhotoGallery: View {
     }
 }
 
-/// Vollbildansicht zum Durchwischen der Fotos eines Laufs.
+/// Vollbildansicht zum Durchwischen der Fotos und Videos eines Laufs.
 struct PhotoViewer: View {
     let run: Run
     let photos: [RunPhoto]
@@ -78,8 +104,15 @@ struct PhotoViewer: View {
                 ForEach(photos) { photo in
                     VStack {
                         Spacer()
-                        LocalPhotoView(url: run.photoURL(photo), maxPixelSize: 2400, contentMode: .fit,
-                                       background: .black)
+                        if photo.video, let videoURL = run.videoURL(photo) {
+                            VideoPage(url: videoURL, isActive: selection == photo)
+                        } else {
+                            LocalPhotoView(url: run.photoURL(photo), maxPixelSize: 2400, contentMode: .fit,
+                                           background: .black)
+                                .overlay {
+                                    if photo.video { videoOnlyInStrava }
+                                }
+                        }
                         Spacer()
                         if let caption = photo.caption, !caption.isEmpty {
                             Text(caption)
@@ -108,5 +141,47 @@ struct PhotoViewer: View {
             .padding()
             .accessibilityLabel("Schließen")
         }
+    }
+
+    /// Strava gibt die Videodatei nicht heraus: Standbild mit Knopf zum Abspielen in Strava.
+    @ViewBuilder
+    private var videoOnlyInStrava: some View {
+        VStack(spacing: 12) {
+            VideoBadge(size: 64)
+            if let url = run.stravaURL {
+                Link(destination: url) {
+                    Label("In Strava ansehen", systemImage: "arrow.up.right.square")
+                        .font(.subheadline.bold())
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .foregroundStyle(.white)
+                }
+            } else {
+                Text("Dieses Video ist nur in Strava verfügbar.")
+                    .font(.subheadline)
+                    .foregroundStyle(.white)
+            }
+        }
+    }
+}
+
+/// Spielt ein Video ab, solange seine Seite in der Vollbildansicht sichtbar ist.
+private struct VideoPage: View {
+    let url: URL
+    let isActive: Bool
+    @State private var player: AVPlayer?
+
+    var body: some View {
+        VideoPlayer(player: player)
+            .aspectRatio(16 / 9, contentMode: .fit)
+            .onAppear {
+                if player == nil { player = AVPlayer(url: url) }
+                if isActive { player?.play() }
+            }
+            .onChange(of: isActive) { _, active in
+                if active { player?.play() } else { player?.pause() }
+            }
+            .onDisappear { player?.pause() }
     }
 }

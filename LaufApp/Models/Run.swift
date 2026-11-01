@@ -107,6 +107,15 @@ final class Run {
 
     func photoURL(_ photo: RunPhoto) -> URL { RunPhotoStore.url(for: photo, runID: id) }
 
+    /// Abspielbare Adresse eines Videos: lokale Datei oder Stream; nil, wenn nur das Standbild vorliegt.
+    func videoURL(_ photo: RunPhoto) -> URL? {
+        if let file = photo.videoFileName { return RunPhotoStore.folder(for: id).appending(path: file) }
+        return photo.videoRemoteURL.flatMap(URL.init(string:))
+    }
+
+    /// Lauf auf strava.com bzw. in der Strava-App (Universal Link)
+    var stravaURL: URL? { stravaID.flatMap { URL(string: "https://www.strava.com/activities/\($0)") } }
+
     var isFromStrava: Bool { source == "strava" }
 
     /// Schnellste Zeit (Sekunden) je Distanz (Meter, gerundet) innerhalb dieses Laufs.

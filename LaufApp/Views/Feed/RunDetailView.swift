@@ -75,7 +75,7 @@ struct RunDetailView: View {
             Menu {
                 Button("Bearbeiten", systemImage: "pencil") { showEdit = true }
                 if run.stravaID != nil && StravaSync.shared.isConnected {
-                    Button("Fotos von Strava aktualisieren", systemImage: "photo.badge.arrow.down") {
+                    Button("Fotos & Videos von Strava aktualisieren", systemImage: "photo.badge.arrow.down") {
                         Task { await refreshPhotos() }
                     }
                     .disabled(isRefreshingPhotos)
@@ -130,7 +130,7 @@ struct RunDetailView: View {
         do {
             let added = try await StravaSync.shared.refreshPhotos(for: run, context: context)
             photos = run.photos
-            message = added == 0 ? "Keine neuen Fotos." : (added == 1 ? "1 Foto hinzugefügt." : "\(added) Fotos hinzugefügt.")
+            message = added == 0 ? "Keine neuen Fotos oder Videos." : (added == 1 ? "1 Foto/Video aktualisiert." : "\(added) Fotos/Videos aktualisiert.")
         } catch {
             message = error.localizedDescription
         }

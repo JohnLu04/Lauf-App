@@ -35,7 +35,7 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 - Herzfrequenz-Verlauf mit Zeit in den 5 Herzfrequenzzonen, Schrittfrequenz-Verlauf, Route, Splits und Höhe
 - Einrichtung mit Schritt-für-Schritt-Anleitung im Profil unter „Strava & Garmin“ (eigene, kostenlose Strava-API-Anwendung; das Client-Secret liegt nur im Schlüsselbund)
 - Bereits mit der App aufgezeichnete Läufe werden nicht doppelt importiert
-- Fotos deiner Strava-Posts werden mit importiert: Galerie mit Vollbildansicht in der Laufansicht, Vorschaubild im Feed
+- Fotos und Videos deiner Strava-Posts werden mit importiert: Galerie mit Vollbildansicht in der Laufansicht, Vorschaubild im Feed. Videos spielt die App ab, wenn Strava die Datei herausgibt, sonst öffnet sie sie in Strava
 
 **Du (Profil)**
 - Wochen-Diagramm der letzten 12 Wochen

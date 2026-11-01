@@ -191,8 +191,10 @@ final class StravaSync {
 
     // MARK: - Fotos
 
-    /// Lädt die Fotos einer Strava-Aktivität herunter und speichert sie beim Lauf.
-    /// Bereits vorhandene Fotos werden nicht erneut geladen. Gibt die Anzahl neuer Fotos zurück.
+    /// Lädt Fotos und Videos einer Strava-Aktivität herunter und speichert sie beim Lauf.
+    /// Bereits vorhandene Einträge werden nicht erneut geladen, aber aktualisiert, falls sich
+    /// herausstellt, dass sie Videos sind (ältere Versionen haben Videos als Fotos gespeichert).
+    /// Gibt die Anzahl neuer oder aktualisierter Einträge zurück.
     @discardableResult
     func importPhotos(for run: Run, activityID: Int) async throws -> Int {
         let photos: [StravaImport.Photo] = try await get("/activities/\(activityID)/photos", query: [
@@ -200,18 +202,51 @@ final class StravaSync {
             URLQueryItem(name: "size", value: String(StravaImport.photoSize)),
         ]) ?? []
         var stored = run.photos
-        let known = Set(stored.map(\.id))
-        var added = 0
+        var changed = 0
         for photo in photos where !photo.isPlaceholder {
-            guard let id = photo.identifier, !known.contains(id), let url = photo.bestURL else { continue }
+            guard let id = photo.identifier else { continue }
+            if let index = stored.firstIndex(where: { $0.id == id }) {
+                // Vorhandener Eintrag: nur Video-Informationen ergänzen
+                guard photo.isVideo, stored[index].videoFileName == nil else { continue }
+                let before = stored[index]
+                stored[index].isVideo = true
+                await attachVideo(photo, to: &stored[index], runID: run.id)
+                if stored[index] != before { changed += 1 }
+                continue
+            }
+            guard let url = photo.bestURL else { continue }
             let (data, response) = try await URLSession.shared.data(from: url)
             guard (response as? HTTPURLResponse)?.statusCode == 200, !data.isEmpty else { continue }
             let fileName = try RunPhotoStore.save(data, photoID: id, runID: run.id)
-            stored.append(RunPhoto(id: id, fileName: fileName, caption: photo.caption))
-            added += 1
+            var entry = RunPhoto(id: id, fileName: fileName, caption: photo.caption, isVideo: photo.isVideo ? true : nil)
+            if photo.isVideo { await attachVideo(photo, to: &entry, runID: run.id) }
+            stored.append(entry)
+            changed += 1
         }
-        if added > 0 { run.photos = stored }
-        return added
+        if changed > 0 { run.photos = stored }
+        return changed
+    }
+
+    /// Lädt die Videodatei herunter oder merkt sich die Stream-Adresse. Ohne Adresse bleibt nur
+    /// das Standbild; das Video wird dann in Strava geöffnet.
+    private func attachVideo(_ photo: StravaImport.Photo, to entry: inout RunPhoto, runID: UUID) async {
+        guard let videoURL = photo.videoURL else { return }
+        guard photo.isDownloadableVideo else {
+            entry.videoRemoteURL = videoURL.absoluteString
+            return
+        }
+        do {
+            let (file, response) = try await URLSession.shared.download(from: videoURL)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+                entry.videoRemoteURL = videoURL.absoluteString
+                return
+            }
+            let ext = videoURL.pathExtension.isEmpty ? "mp4" : videoURL.pathExtension.lowercased()
+            entry.videoFileName = try RunPhotoStore.move(file, photoID: entry.id + "-video", runID: runID, fileExtension: ext)
+        } catch {
+            // Download fehlgeschlagen: wenigstens streamen versuchen
+            entry.videoRemoteURL = videoURL.absoluteString
+        }
     }
 
     /// Holt Fotos nach, die nach dem Import bei Strava hinzugefügt wurden.

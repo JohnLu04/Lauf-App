@@ -40,14 +40,59 @@ enum StravaImport {
     }
 
     /// Foto aus `GET /activities/{id}/photos?photo_sources=true&size=…`.
+    /// Foto oder Video. Strava kennzeichnet Videos über `media_type`; eine Adresse der Videodatei
+    /// ist nicht dokumentiert. Deshalb werden alle Felder (auch verschachtelte) nach einer
+    /// Video-Adresse durchsucht (.mp4, .mov, .m3u8 oder ein Feld mit "video" im Namen).
     struct Photo: Decodable {
         let uniqueId: String?
         let id: Int?
         let urls: [String: String]?
         let caption: String?
         let source: Int?
+        /// 1 = Foto, 2 = Video (laut Strava-Forum; nicht offiziell dokumentiert)
+        let mediaType: Int?
+        let videoURL: URL?
 
         var identifier: String? { uniqueId ?? id.map(String.init) }
+
+        var isVideo: Bool { mediaType == 2 || videoURL != nil }
+
+        private struct AnyKey: CodingKey {
+            var stringValue: String
+            var intValue: Int? { nil }
+            init(stringValue: String) { self.stringValue = stringValue }
+            init?(intValue: Int) { nil }
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: AnyKey.self)
+            func value<T: Decodable>(_ key: String, _ type: T.Type) -> T? {
+                try? c.decodeIfPresent(type, forKey: AnyKey(stringValue: key))
+            }
+            uniqueId = value("uniqueId", String.self)
+            id = value("id", Int.self)
+            urls = value("urls", [String: String].self)
+            caption = value("caption", String.self)
+            source = value("source", Int.self)
+            mediaType = value("mediaType", Int.self)
+
+            // Video-Adresse suchen: zuerst Felder mit "video" im Namen, dann jede Adresse mit Videoendung
+            var candidates: [(String, String)] = []
+            for key in c.allKeys {
+                if let string = try? c.decode(String.self, forKey: key) {
+                    candidates.append((key.stringValue, string))
+                } else if let dict = try? c.decode([String: String].self, forKey: key) {
+                    candidates += dict.map { ("\(key.stringValue).\($0.key)", $0.value) }
+                }
+            }
+            func isVideoAddress(_ s: String) -> Bool {
+                let path = (URL(string: s)?.path ?? s).lowercased()
+                return [".mp4", ".mov", ".m4v", ".m3u8"].contains { path.hasSuffix($0) }
+            }
+            let byName = candidates.first { $0.0.lowercased().contains("video") && $0.1.hasPrefix("http") }
+            let byExtension = candidates.first { $0.1.hasPrefix("http") && isVideoAddress($0.1) }
+            videoURL = (byName ?? byExtension).flatMap { URL(string: $0.1) }
+        }
 
         /// Größte verfügbare Bildadresse
         var bestURL: URL? {
@@ -58,6 +103,12 @@ enum StravaImport {
 
         /// Strava liefert für noch nicht verarbeitete Fotos ein Platzhalterbild.
         var isPlaceholder: Bool { bestURL?.absoluteString.contains("placeholder") ?? true }
+
+        /// Videodatei zum Herunterladen (bei Streams wie .m3u8 wird nur gestreamt)
+        var isDownloadableVideo: Bool {
+            guard let path = videoURL?.path.lowercased() else { return false }
+            return !path.hasSuffix(".m3u8")
+        }
     }
 
     static let photoSize = 2048

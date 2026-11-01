@@ -106,6 +106,7 @@ struct RunCardView: View {
                 if let first = photos.first {
                     LocalPhotoView(url: run.photoURL(first), maxPixelSize: 500)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .overlay { if first.video { VideoBadge(size: 38) } }
                         .overlay(alignment: .bottomTrailing) {
                             if photos.count > 1 {
                                 Label("\(photos.count)", systemImage: "photo.on.rectangle")
