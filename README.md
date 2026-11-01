@@ -27,6 +27,7 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 - Bei der Planerstellung wählst du Trainingstage, den Tag für den langen Lauf und deinen gewünschten Wochenumfang; reicht er für dein Ziel nicht, warnt die App
 - Strukturierte Workouts (Einlaufen, Intervalle, Pausen, Auslaufen) mit Sprachführung: Ansage jedes Abschnitts, „Noch 200 Meter“, Hinweise bei zu schneller oder zu langsamer Pace
 - Einheiten verschieben oder überspringen, Plan jederzeit anpassen (Tage, Umfang, Form), ohne Vergangenes zu verlieren
+- Export in die Kalender-App: eigener Kalender „LaufApp Training“, ganztägig oder mit Uhrzeit und Erinnerung; wird bei Änderungen am Plan automatisch aktualisiert
 - Erkennt die App aus deinen Läufen eine bessere Form, schlägt sie neue Paces vor und zeigt eine aktualisierte Prognose
 
 **Du (Profil)**

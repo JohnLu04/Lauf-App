@@ -9,6 +9,7 @@ struct PlanOverviewView: View {
     @Environment(\.modelContext) private var context
     @State private var confirmDelete = false
     @State private var showAdjust = false
+    @State private var showCalendar = false
 
     /// Form aus den letzten Läufen, wenn sie spürbar besser ist als die des Plans.
     private var improvedVDOT: Double? {
@@ -73,6 +74,8 @@ struct PlanOverviewView: View {
         .toolbar {
             Menu {
                 Button("Plan anpassen", systemImage: "slider.horizontal.3") { showAdjust = true }
+                Button(CalendarExport.isSynced(plan) ? "Kalender aktualisieren" : "In Kalender exportieren",
+                       systemImage: "calendar.badge.plus") { showCalendar = true }
                 Button("Neuen Plan erstellen", systemImage: "plus", action: onNewPlan)
                 Button("Plan löschen", systemImage: "trash", role: .destructive) { confirmDelete = true }
             } label: {
@@ -80,10 +83,16 @@ struct PlanOverviewView: View {
             }
         }
         .confirmationDialog("Trainingsplan löschen?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Löschen", role: .destructive) { context.delete(plan) }
+            Button("Löschen", role: .destructive) {
+                try? CalendarExport.remove(plan)
+                context.delete(plan)
+            }
         }
         .sheet(isPresented: $showAdjust) {
             PlanAdjustView(plan: plan, suggestedVDOT: VDOT.estimate(from: runs))
+        }
+        .sheet(isPresented: $showCalendar) {
+            CalendarExportView(plan: plan)
         }
     }
 

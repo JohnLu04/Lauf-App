@@ -77,6 +77,7 @@ struct WorkoutDetailView: View {
                     Button(skipped ? "Doch nicht überspringen" : "Überspringen",
                            systemImage: skipped ? "arrow.uturn.backward.circle" : "forward.circle") {
                         plan.toggleSkipped(workout)
+                        CalendarExport.resyncIfNeeded(plan)
                         if plan.isSkipped(workout) { dismiss() }
                     }
                     Button("Auf anderen Tag verschieben", systemImage: "calendar") {
@@ -123,6 +124,7 @@ struct WorkoutDetailView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Verschieben") {
                         plan.move(workout, to: moveDate)
+                        CalendarExport.resyncIfNeeded(plan)
                         showMove = false
                         dismiss()
                     }

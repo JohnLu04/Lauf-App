@@ -158,8 +158,10 @@ struct PlanSetupView: View {
         let input = input
         do {
             let result = try PlanGenerator.generate(input)
+            let plan = TrainingPlan(input: input, generated: result)
+            CalendarExport.replaceSyncedPlan(with: plan, previous: activePlans)
             activePlans.forEach { $0.isActive = false }
-            context.insert(TrainingPlan(input: input, generated: result))
+            context.insert(plan)
             try? context.save()
             dismiss()
         } catch {

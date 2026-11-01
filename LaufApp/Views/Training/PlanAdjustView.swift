@@ -104,6 +104,7 @@ struct PlanAdjustView: View {
             plan.currentWeeklyKm = input.currentWeeklyKm
             plan.targetWeeklyKm = input.targetWeeklyKm
             plan.currentVDOT = input.currentVDOT
+            CalendarExport.resyncIfNeeded(plan)
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
