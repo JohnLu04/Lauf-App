@@ -56,6 +56,8 @@ enum PlanGenerator {
 
     private struct WeekContext {
         var index: Int
+        /// Wievielte Aufbauwoche (ohne Entlastungswochen) innerhalb der aktuellen Phase
+        var phaseWeek: Int
         var goal: RaceGoal
         var phase: TrainingPhase
         var isRecovery: Bool
@@ -103,6 +105,7 @@ enum PlanGenerator {
                                         peakLong: longRunPeak(goal: goal, peakKm: peak, runs: runs))
 
         var weeks: [PlanWeek] = []
+        var phaseWeeks: [TrainingPhase: Int] = [:]
         for w in 0..<weekCount {
             let weekStart = cal.date(byAdding: .weekOfYear, value: w, to: span.firstWeek)!
             let phase: TrainingPhase
@@ -119,7 +122,10 @@ enum PlanGenerator {
                                 input.currentVDOT + Double(sinceForm) / 4)
             // Der Wochenumfang muss groß genug sein, dass der lange Lauf nicht zu viel davon ausmacht.
             let volume = max(volumes[w].km * 1000, longRuns[w] / maxLongShare(runs: runs, goal: goal))
-            let ctx = WeekContext(index: w, goal: goal, phase: phase, isRecovery: volumes[w].recovery,
+            let phaseWeek = phaseWeeks[phase, default: 0]
+            if !volumes[w].recovery { phaseWeeks[phase] = phaseWeek + 1 }
+            let ctx = WeekContext(index: w, phaseWeek: phaseWeek, goal: goal, phase: phase,
+                                  isRecovery: volumes[w].recovery,
                                   volume: volume, longRun: longRuns[w],
                                   paces: VDOT.paces(vdot: max(input.currentVDOT, trainVDOT)),
                                   goalPace: goalPace, runs: runs)
@@ -341,12 +347,8 @@ enum PlanGenerator {
 
     private static func regularWeek(start: Date, pattern pat: [(day: Int, slot: Slot)],
                                     ctx: WeekContext, cal: Calendar) -> [PlannedWorkout] {
-        var q1 = quality1(ctx)
-        var q2 = quality2(ctx)
         let hasQuality2 = pat.contains { $0.slot == .quality2 }
-        // Mit nur einer harten Einheit pro Woche wechseln sich die beiden Qualitätseinheiten wöchentlich ab.
-        if !hasQuality2, ctx.index % 2 == 1, let alternative = q2 { q1 = alternative }
-        if !hasQuality2 { q2 = nil }
+        let (q1, q2) = qualitySessions(ctx, twoSlots: hasQuality2)
 
         let longDist = ctx.longRun
 
@@ -441,31 +443,78 @@ enum PlanGenerator {
 
     // MARK: - Auswahl der Qualitätseinheiten
 
-    private static func quality1(_ ctx: WeekContext) -> Spec {
-        if ctx.isRecovery { return strides(ctx) }
-        switch ctx.phase {
-        case .base: return strides(ctx)
-        case .build: return threshold(ctx)
-        case .peak: return [.fiveK, .tenK].contains(ctx.goal) ? intervals(ctx) : threshold(ctx)
-        case .taper: return racePace(ctx, short: true)
+    private enum Session { case strides, repetition, threshold, intervals, racePace }
+
+    /// Harte Einheiten je Ziel und Phase, angelehnt an Daniels' Phasenmodell:
+    /// Grundlage → Schnelligkeit und Laufökonomie (R), Aufbau → VO2max (I) und Schwelle (T),
+    /// wettkampfspezifisch → das Tempo, auf das es im Wettkampf ankommt.
+    /// Kurze Distanzen setzen mehr auf R und I, lange mehr auf T und Wettkampftempo,
+    /// aber jede Trainingsart kommt vor. Die Listen rotieren von Woche zu Woche.
+    private static func rotation(_ goal: RaceGoal, _ phase: TrainingPhase)
+        -> (primary: [Session], secondary: [Session])
+    {
+        switch (goal, phase) {
+        case (.fiveK, .base): ([.repetition], [.strides, .threshold])
+        case (.fiveK, .build): ([.intervals], [.repetition, .threshold])
+        case (.fiveK, _): ([.racePace, .intervals], [.repetition, .threshold])
+
+        case (.tenK, .base): ([.repetition], [.strides, .threshold])
+        case (.tenK, .build): ([.intervals, .threshold], [.threshold, .repetition])
+        case (.tenK, _): ([.racePace, .intervals], [.threshold, .repetition])
+
+        case (.half, .base): ([.repetition, .threshold], [.strides])
+        case (.half, .build): ([.threshold], [.intervals, .repetition])
+        case (.half, _): ([.threshold, .racePace], [.racePace, .intervals])
+
+        case (.marathon, .base): ([.repetition, .threshold], [.strides])
+        case (.marathon, .build): ([.threshold], [.racePace, .intervals])
+        case (.marathon, _): ([.threshold], [.racePace, .racePace, .intervals])
         }
     }
 
-    private static func quality2(_ ctx: WeekContext) -> Spec? {
-        if ctx.isRecovery { return nil }
-        switch ctx.phase {
-        case .base: return [.fiveK, .tenK].contains(ctx.goal) ? repetition(ctx) : nil
-        case .build: return ctx.goal == .marathon ? racePace(ctx, short: false) : intervals(ctx)
-        case .peak: return racePace(ctx, short: false)
-        case .taper: return nil
+    private static func spec(_ session: Session, _ ctx: WeekContext) -> Spec {
+        switch session {
+        case .strides: strides(ctx)
+        case .repetition: repetition(ctx)
+        case .threshold: threshold(ctx)
+        case .intervals: intervals(ctx)
+        case .racePace: racePace(ctx, short: false)
         }
+    }
+
+    /// Harte Einheiten der Woche. Mit nur einer harten Einheit pro Woche wechseln sich Haupt- und
+    /// Nebeneinheiten ab (ohne reine Steigerungsläufe, die gibt es in den Entlastungswochen),
+    /// damit trotzdem möglichst alle Trainingsarten vorkommen.
+    private static func qualitySessions(_ ctx: WeekContext, twoSlots: Bool) -> (Spec, Spec?) {
+        if ctx.isRecovery { return (strides(ctx), nil) }
+        if ctx.phase == .taper { return (racePace(ctx, short: true), nil) }
+        let (primary, secondary) = rotation(ctx.goal, ctx.phase)
+        let i = ctx.phaseWeek
+        if !twoSlots {
+            var mixed: [Session] = []
+            for j in 0..<max(primary.count, secondary.count) {
+                for s in [primary[j % primary.count], secondary[j % secondary.count]]
+                where s != .strides && !mixed.contains(s) { mixed.append(s) }
+            }
+            return (spec(mixed[i % mixed.count], ctx), nil)
+        }
+        let first = primary[i % primary.count]
+        var second = secondary[i % secondary.count]
+        if second == first { second = secondary[(i + 1) % secondary.count] }
+        return (spec(first, ctx), spec(second, ctx))
     }
 
     // MARK: - Bausteine
 
     /// Tempoeinheiten (inkl. Ein- und Auslaufen) bleiben kürzer als der lange Lauf.
     private static func qualityLimit(_ ctx: WeekContext) -> Double {
-        max(6000, ctx.longRun - 1000)
+        max(4500, ctx.longRun - 1000)
+    }
+
+    /// Ein- und Auslaufen je Tempoeinheit: 2 km, bei kurzen langen Läufen 1,5 km.
+    private static func warmupFrame(_ ctx: WeekContext) -> (meters: Double, km: Double, text: String) {
+        let meters: Double = ctx.longRun < 8000 ? 1500 : 2000
+        return (meters, meters / 1000, Format.kilometers(meters, decimals: meters == 2000 ? 0 : 1))
     }
 
     private static func easyRange(_ p: TrainingPaces) -> String {
@@ -555,87 +604,91 @@ enum PlanGenerator {
     }
 
     private static func threshold(_ ctx: WeekContext) -> Spec {
+        let (wu, wuKm, wuText) = warmupFrame(ctx)
         let limitKm = qualityLimit(ctx) / 1000
-        let tKm = min(10, max(3, (ctx.volumeKm * 0.10).rounded()), max(2, (limitKm - 4).rounded(.down)))
+        let tKm = min(10, max(3, (ctx.volumeKm * 0.10).rounded()), max(2, (limitKm - 2 * wuKm).rounded(.down)))
         let t = Format.pace(ctx.paces.threshold)
         let tp = paceRange(ctx.paces.threshold)
         if tKm <= 5 {
             return Spec(kind: .threshold, title: "Tempodauerlauf",
                         details: """
-                        2 km einlaufen (locker)
+                        \(wuText) km einlaufen (locker)
                         \(Int(tKm)) km zügig an der Schwelle: \(t) /km
-                        2 km auslaufen (locker)
+                        \(wuText) km auslaufen (locker)
 
                         "Angenehm hart": Du könntest nur noch einzelne Wörter sprechen.
                         """,
-                        distance: (tKm + 4) * 1000,
+                        distance: (tKm + 2 * wuKm) * 1000,
                         steps: { _ in [
-                            warmup(ctx),
+                            warmup(ctx, wu),
                             WorkoutStep(kind: .run, label: "Tempodauerlauf", distance: tKm * 1000,
                                         paceFast: tp.fast, paceSlow: tp.slow),
-                            cooldown(ctx),
+                            cooldown(ctx, wu),
                         ] })
         }
-        let n = min(Int((tKm / 2).rounded()), Int((limitKm - 4) / 2.2))
+        let n = min(Int((tKm / 2).rounded()), Int((limitKm - 2 * wuKm) / 2.2))
         return Spec(kind: .threshold, title: "Schwellenintervalle",
                     details: """
-                    2 km einlaufen (locker)
+                    \(wuText) km einlaufen (locker)
                     \(n) × 2 km @ \(t) /km, je 1 min Trabpause
-                    2 km auslaufen (locker)
+                    \(wuText) km auslaufen (locker)
                     """,
-                    distance: Double(n) * 2000 + 4000 + Double(n) * 200,
+                    distance: Double(n) * 2000 + 2 * wu + Double(n) * 200,
                     steps: { _ in
-                        [warmup(ctx)] + reps(n, label: "Schwelle", distance: 2000, pace: tp, recoveryDuration: 60)
-                            + [cooldown(ctx)]
+                        [warmup(ctx, wu)] + reps(n, label: "Schwelle", distance: 2000, pace: tp, recoveryDuration: 60)
+                            + [cooldown(ctx, wu)]
                     })
     }
 
     private static func intervals(_ ctx: WeekContext) -> Spec {
+        let (wu, _, wuText) = warmupFrame(ctx)
         let iKm = min(8, max(3, ctx.volumeKm * 0.08))
         let rep = iKm >= 5 ? 1000.0 : 800.0
         let n = max(3, min(Int((iKm * 1000 / rep).rounded()),
-                           Int((qualityLimit(ctx) - 4000) / (rep + 400))))
+                           Int((qualityLimit(ctx) - 2 * wu) / (rep + 400))))
         let repTime = ctx.paces.interval * rep / 1000
         return Spec(kind: .intervals, title: "VO2max-Intervalle",
                     details: """
-                    2 km einlaufen (locker) + 4 Steigerungen
+                    \(wuText) km einlaufen (locker) + 4 Steigerungen
                     \(n) × \(Int(rep)) m @ \(Format.pace(ctx.paces.interval)) /km (≈ \(Format.duration(repTime)) pro Wiederholung)
                     Trabpause: 2–3 min (etwa so lang wie die Belastung)
-                    2 km auslaufen (locker)
+                    \(wuText) km auslaufen (locker)
                     """,
-                    distance: 4000 + Double(n) * rep + Double(n) * 400,
+                    distance: 2 * wu + Double(n) * rep + Double(n) * 400,
                     steps: { _ in
-                        [warmup(ctx)]
+                        [warmup(ctx, wu)]
                             + reps(n, label: "Intervall", distance: rep, pace: paceRange(ctx.paces.interval),
                                    recoveryDuration: min(180, max(120, repTime)))
-                            + [cooldown(ctx)]
+                            + [cooldown(ctx, wu)]
                     })
     }
 
     private static func repetition(_ ctx: WeekContext) -> Spec {
+        let (wu, _, wuText) = warmupFrame(ctx)
         let rKm = min(5, max(2, ctx.volumeKm * 0.05))
         let rep = rKm >= 3 ? 400.0 : 200.0
-        let n = max(6, min(Int(rKm * 1000 / rep), Int((qualityLimit(ctx) - 4000) / (2 * rep))))
+        let n = max(6, min(Int(rKm * 1000 / rep), Int((qualityLimit(ctx) - 2 * wu) / (2 * rep))))
         let repTime = ctx.paces.repetition * rep / 1000
         return Spec(kind: .repetition, title: "Tempowiederholungen",
                     details: """
-                    2 km einlaufen (locker)
+                    \(wuText) km einlaufen (locker)
                     \(n) × \(Int(rep)) m @ \(Format.pace(ctx.paces.repetition)) /km (≈ \(Int(repTime.rounded())) s)
                     Pause: \(Int(rep)) m locker traben – vollständig erholen
-                    2 km auslaufen (locker)
+                    \(wuText) km auslaufen (locker)
 
                     Fokus auf saubere, lockere Technik, nicht auf Kampf.
                     """,
-                    distance: 4000 + Double(n) * rep * 2,
+                    distance: 2 * wu + Double(n) * rep * 2,
                     steps: { _ in
-                        [warmup(ctx)]
+                        [warmup(ctx, wu)]
                             + reps(n, label: "Wiederholung", distance: rep, pace: paceRange(ctx.paces.repetition),
                                    recoveryDistance: rep)
-                            + [cooldown(ctx)]
+                            + [cooldown(ctx, wu)]
                     })
     }
 
     private static func racePace(_ ctx: WeekContext, short: Bool) -> Spec {
+        let (wu, wuKm, wuText) = warmupFrame(ctx)
         let gp = Format.pace(ctx.goalPace)
         let goalRange = paceRange(ctx.goalPace, tolerance: 0.02)
         let title = short ? "Tempo-Schärfung" : "Wettkampftempo"
@@ -650,41 +703,41 @@ enum PlanGenerator {
             pauseSeconds = 180
         case .marathon:
             let mKm = short ? 6 : min(16, max(8, (ctx.volumeKm * 0.2).rounded()),
-                                      max(6, (qualityLimit(ctx) / 1000 - 4).rounded(.down)))
+                                      max(6, (qualityLimit(ctx) / 1000 - 2 * wuKm).rounded(.down)))
             return Spec(kind: .racePace, title: title,
                         details: """
-                        2 km einlaufen (locker)
+                        \(wuText) km einlaufen (locker)
                         \(Int(mKm)) km am Stück im Marathontempo: \(gp) /km
-                        2 km auslaufen (locker)
+                        \(wuText) km auslaufen (locker)
                         """,
-                        distance: (mKm + 4) * 1000,
+                        distance: (mKm + 2 * wuKm) * 1000,
                         steps: { _ in [
-                            warmup(ctx),
+                            warmup(ctx, wu),
                             WorkoutStep(kind: .run, label: "Marathontempo", distance: mKm * 1000,
                                         paceFast: goalRange.fast, paceSlow: goalRange.slow),
-                            cooldown(ctx),
+                            cooldown(ctx, wu),
                         ] })
         }
         // Passen keine zwei Wiederholungen in die erlaubte Länge, werden die Abschnitte kürzer.
         let limit = qualityLimit(ctx)
-        if Int((limit - 4000) / (repDist + 400)) < 2 {
-            repDist = max(1000, (((limit - 4000) / 2 - 400) / 500).rounded(.down) * 500)
+        if Int((limit - 2 * wu) / (repDist + 400)) < 2 {
+            repDist = max(1000, (((limit - 2 * wu) / 2 - 400) / 500).rounded(.down) * 500)
         }
-        reps = max(2, min(reps, Int((limit - 4000) / (repDist + 400))))
+        reps = max(2, min(reps, Int((limit - 2 * wu) / (repDist + 400))))
         let repText = repDist >= 1000 ? "\(Format.kilometers(repDist, decimals: 0)) km" : "\(Int(repDist)) m"
         let count = reps
         return Spec(kind: .racePace, title: title,
                     details: """
-                    2 km einlaufen (locker) + 4 Steigerungen
+                    \(wuText) km einlaufen (locker) + 4 Steigerungen
                     \(reps) × \(repText) im Zieltempo: \(gp) /km, \(pause)
-                    2 km auslaufen (locker)
+                    \(wuText) km auslaufen (locker)
                     """,
-                    distance: 4000 + Double(reps) * repDist + Double(reps) * 400,
+                    distance: 2 * wu + Double(reps) * repDist + Double(reps) * 400,
                     steps: { _ in
-                        [warmup(ctx)]
+                        [warmup(ctx, wu)]
                             + Self.reps(count, label: "Zieltempo", distance: repDist, pace: goalRange,
                                         recoveryDuration: pauseSeconds)
-                            + [cooldown(ctx)]
+                            + [cooldown(ctx, wu)]
                     })
     }
 

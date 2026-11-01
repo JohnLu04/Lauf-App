@@ -21,6 +21,7 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 - Trainingspläne für 5 km, 10 km, Halbmarathon und Marathon
 - Paces nach dem **VDOT-System von Jack Daniels**: locker (E), Marathon (M), Schwelle (T), Intervall (I), Wiederholung (R)
 - Phasen: Grundlage → Aufbau → wettkampfspezifisch → Tapering
+- Alle Trainingsarten im Wechsel: Wiederholungen (R) für Schnelligkeit, Intervalle (I) für VO2max, Schwelle (T) und Wettkampftempo – gewichtet nach Zieldistanz und Phase
 - Umfang steigt höchstens ca. 10 % pro Woche, jede 4. Woche ist eine Entlastungswoche
 - Workouts werden automatisch abgehakt, wenn du am selben Tag läufst
 - Bei der Planerstellung wählst du Trainingstage, den Tag für den langen Lauf und deinen gewünschten Wochenumfang; reicht er für dein Ziel nicht, warnt die App
