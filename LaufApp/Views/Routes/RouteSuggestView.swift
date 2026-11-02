@@ -15,6 +15,9 @@ struct RouteSuggestView: View {
 
     @State private var targetKm = 5.0
     @AppStorage("avoidClimbs") private var avoidClimbs = false
+    @AppStorage("preferWater") private var preferWater = false
+    /// Hinweis unter den Vorschlägen (z. B. keine Gewässer gefunden)
+    @State private var note: String?
     @State private var suggestions: [LoopSuggestion] = []
     @State private var selectedID: UUID?
     @State private var status: String?
@@ -84,6 +87,10 @@ struct RouteSuggestView: View {
                 Label("Höhenmeter meiden", systemImage: "mountain.2")
                     .font(.subheadline)
             }
+            Toggle(isOn: $preferWater) {
+                Label("Am Wasser entlang", systemImage: "water.waves")
+                    .font(.subheadline)
+            }
             HStack(spacing: 6) {
                 ForEach([3.0, 5, 8, 10, 15], id: \.self) { km in
                     Button("\(Int(km)) km") { targetKm = km }
@@ -123,6 +130,9 @@ struct RouteSuggestView: View {
                         }
                     }
                 }
+                if let note {
+                    Label(note, systemImage: "info.circle").font(.caption).foregroundStyle(.secondary)
+                }
                 HStack {
                     Button("Neu suchen", systemImage: "arrow.clockwise") { search() }
                         .buttonStyle(.bordered)
@@ -149,6 +159,9 @@ struct RouteSuggestView: View {
             if !suggestions.isEmpty { suggestions = []; selectedID = nil; status = nil }
         }
         .onChange(of: avoidClimbs) { _, _ in
+            if !suggestions.isEmpty { suggestions = []; selectedID = nil; status = nil }
+        }
+        .onChange(of: preferWater) { _, _ in
             if !suggestions.isEmpty { suggestions = []; selectedID = nil; status = nil }
         }
     }
@@ -192,13 +205,16 @@ struct RouteSuggestView: View {
         let target = targetKm * 1000
         suggestions = []
         selectedID = nil
+        note = nil
         isSearching = true
         status = "Suche Parks und Grünflächen …"
         searchTask = Task {
             let found = await GreenSpaceFinder.find(near: start, radius: target * 0.45)
             source = found.source
-            let result = await LoopGenerator.suggestions(start: start, target: target, spaces: found.spaces,
-                                                         avoidClimbs: avoidClimbs) { text in
+            let water = found.result.water
+            let result = await LoopGenerator.suggestions(start: start, target: target, spaces: found.result.spaces,
+                                                         avoidClimbs: avoidClimbs, water: water,
+                                                         preferWater: preferWater) { text in
                 status = text
             }
             guard !Task.isCancelled else { return }
@@ -211,6 +227,12 @@ struct RouteSuggestView: View {
             status = result.isEmpty
                 ? "Keine passende Runde gefunden. Versuch eine andere Distanz oder plane die Route selbst."
                 : nil
+            if preferWater, !result.contains(where: { $0.waterShare >= 0.3 }) {
+                note = found.source == .appleMaps
+                    ? "Gewässerdaten werden noch geladen. Tippe gleich noch einmal auf „Neu suchen“."
+                    : (water.isEmpty ? "Keine Flüsse oder Seen in der Nähe gefunden."
+                                     : "Keine passende Runde am Wasser für diese Distanz gefunden.")
+            }
         }
     }
 

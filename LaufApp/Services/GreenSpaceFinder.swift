@@ -79,6 +79,14 @@ struct GreenSpace: Codable, Hashable {
 enum GreenSpaceFinder {
     enum Source { case openStreetMap, appleMaps, none }
 
+    /// Ergebnis einer Abfrage: Grünflächen und Flüsse (Flüsse gibt es nur von OpenStreetMap).
+    struct Result: Codable {
+        var spaces: [GreenSpace]
+        var rivers: [Waterway]
+
+        var water: WaterFeatures { WaterFeatures(rivers: rivers, lakes: spaces.filter { $0.kind == .water }) }
+    }
+
     static let log = Logger(subsystem: "de.josc.LaufApp", category: "Routes")
 
     static let overpassServers = [
@@ -88,51 +96,55 @@ enum GreenSpaceFinder {
     ].compactMap(URL.init(string:))
 
     static func find(near center: RouteCoordinate, radius: Double,
-                     osmWait: TimeInterval = 12) async -> (spaces: [GreenSpace], source: Source) {
+                     osmWait: TimeInterval = 12) async -> (result: Result, source: Source) {
         let radius = min(8000, max(1000, radius))
         if let cached = loadCache(center: center, radius: radius) {
-            log.info("Grünflächen aus Zwischenspeicher: \(cached.count)")
+            log.info("Aus Zwischenspeicher: \(cached.spaces.count) Grünflächen, \(cached.rivers.count) Flüsse")
             return (cached, .openStreetMap)
         }
         async let apple = fetchApplePOIs(center: center, radius: radius)
         // Läuft unabhängig weiter, auch wenn wir nicht auf das Ergebnis warten
-        let osmTask = Task.detached { () -> [GreenSpace]? in
-            guard let spaces = await fetchOverpassFromAnyServer(center: center, radius: radius), !spaces.isEmpty
+        let osmTask = Task.detached { () -> Result? in
+            guard let result = await fetchOverpassFromAnyServer(center: center, radius: radius),
+                  !result.spaces.isEmpty || !result.rivers.isEmpty
             else { return nil }
-            saveCache(spaces, center: center, radius: radius)
-            return spaces
+            saveCache(result, center: center, radius: radius)
+            return result
         }
         if let osm = await waitForValue(of: osmTask, seconds: osmWait) {
-            log.info("Grünflächen von OpenStreetMap: \(osm.count)")
+            log.info("Von OpenStreetMap: \(osm.spaces.count) Grünflächen, \(osm.rivers.count) Flüsse")
             return (osm, .openStreetMap)
         }
         let appleSpaces = await apple
         log.info("OpenStreetMap zu langsam, Parks von Apple Karten: \(appleSpaces.count)")
-        return (appleSpaces, appleSpaces.isEmpty ? .none : .appleMaps)
+        return (Result(spaces: appleSpaces, rivers: []), appleSpaces.isEmpty ? .none : .appleMaps)
     }
 
     /// Ergebnis eines Tasks, falls er innerhalb der Frist fertig wird (der Task läuft sonst weiter).
+    /// Bewusst ohne Task-Gruppe: Eine Gruppe wartet beim Beenden auf alle Kinder, auch auf das Warten
+    /// auf `task.value`, das sich nicht abbrechen lässt – die Frist hätte dann keine Wirkung.
     private static func waitForValue<T: Sendable>(of task: Task<T?, Never>, seconds: TimeInterval) async -> T? {
-        await withTaskGroup(of: T?.self) { group in
-            group.addTask { await task.value }
-            group.addTask {
-                try? await Task.sleep(for: .seconds(seconds))
-                return nil
+        await withCheckedContinuation { continuation in
+            let once = OnceFlag()
+            Task {
+                let value = await task.value
+                if once.claim() { continuation.resume(returning: value) }
             }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
+            Task {
+                try? await Task.sleep(for: .seconds(seconds))
+                if once.claim() { continuation.resume(returning: nil) }
+            }
         }
     }
 
     /// Fragt alle Overpass-Server gleichzeitig; die erste brauchbare Antwort gewinnt.
-    static func fetchOverpassFromAnyServer(center: RouteCoordinate, radius: Double) async -> [GreenSpace]? {
-        await withTaskGroup(of: [GreenSpace]?.self) { group in
+    static func fetchOverpassFromAnyServer(center: RouteCoordinate, radius: Double) async -> Result? {
+        await withTaskGroup(of: Result?.self) { group in
             for server in overpassServers {
                 group.addTask { try? await fetchOverpass(server: server, center: center, radius: radius) }
             }
             for await result in group {
-                if let result, !result.isEmpty {
+                if let result, !result.spaces.isEmpty || !result.rivers.isEmpty {
                     group.cancelAll()
                     return result
                 }
@@ -151,19 +163,23 @@ enum GreenSpaceFinder {
          nwr["landuse"="forest"](\(around));
          nwr["natural"~"^(wood|water)$"](\(around)););
         out tags bb qt 400;
+        way["waterway"~"^(river|canal)$"](\(around));
+        out tags geom qt 80;
         """
     }
 
     private struct OverpassResponse: Decodable {
         struct Element: Decodable {
             struct Bounds: Decodable { let minlat, minlon, maxlat, maxlon: Double }
+            struct Point: Decodable { let lat, lon: Double }
             let bounds: Bounds?
             let tags: [String: String]?
+            let geometry: [Point]?
         }
         let elements: [Element]
     }
 
-    static func fetchOverpass(server: URL, center: RouteCoordinate, radius: Double) async throws -> [GreenSpace] {
+    static func fetchOverpass(server: URL, center: RouteCoordinate, radius: Double) async throws -> Result {
         var request = URLRequest(url: server, timeoutInterval: 120)
         request.httpMethod = "POST"
         request.setValue("LaufApp (github.com/JohnLu04/Lauf-App)", forHTTPHeaderField: "User-Agent")
@@ -176,10 +192,17 @@ enum GreenSpaceFinder {
         return parseOverpass(data)
     }
 
-    static func parseOverpass(_ data: Data) -> [GreenSpace] {
-        guard let response = try? JSONDecoder().decode(OverpassResponse.self, from: data) else { return [] }
-        return response.elements.compactMap { element in
-            guard let b = element.bounds, let tags = element.tags else { return nil }
+    static func parseOverpass(_ data: Data) -> Result {
+        guard let response = try? JSONDecoder().decode(OverpassResponse.self, from: data) else {
+            return Result(spaces: [], rivers: [])
+        }
+        let riverParts: [Waterway] = response.elements.compactMap { element in
+            guard let tags = element.tags, tags["waterway"] != nil, let geometry = element.geometry else { return nil }
+            return Waterway(name: tags["name"], line: geometry.map { RouteCoordinate(latitude: $0.lat, longitude: $0.lon) },
+                            width: Waterway.width(tags: tags))
+        }
+        let spaces: [GreenSpace] = response.elements.compactMap { element in
+            guard let b = element.bounds, let tags = element.tags, tags["waterway"] == nil else { return nil }
             let kind: GreenSpace.Kind
             switch (tags["leisure"], tags["landuse"], tags["natural"]) {
             case ("track", _, _):
@@ -199,6 +222,7 @@ enum GreenSpaceFinder {
             // Kleine Flächen bringen für eine Laufrunde nichts; bei Laufbahnen nur ganze Bahnen, keine Sprintgeraden
             return space.area >= (kind == .track ? 5000 : 8000) && !space.isUnsuitable ? space : nil
         }
+        return Result(spaces: spaces, rivers: Waterway.merge(riverParts))
     }
 
     // MARK: - Apple Karten (Ersatz)
@@ -219,20 +243,35 @@ enum GreenSpaceFinder {
     // MARK: - Zwischenspeicher
 
     private static func cacheURL(center: RouteCoordinate, radius: Double) -> URL {
-        let key = String(format: "greenspaces_%.2f_%.2f_%d.json", center.latitude, center.longitude, Int(radius / 1000))
+        // "osm2": mit Flüssen (ältere Zwischenspeicher ohne Flüsse werden nicht mehr verwendet)
+        let key = String(format: "osm2_%.2f_%.2f_%d.json", center.latitude, center.longitude, Int(radius / 1000))
         return URL.cachesDirectory.appending(path: key)
     }
 
-    private static func loadCache(center: RouteCoordinate, radius: Double) -> [GreenSpace]? {
+    private static func loadCache(center: RouteCoordinate, radius: Double) -> Result? {
         let url = cacheURL(center: center, radius: radius)
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
               let modified = attrs[.modificationDate] as? Date,
               Date().timeIntervalSince(modified) < 14 * 86_400,
               let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode([GreenSpace].self, from: data)
+        return try? JSONDecoder().decode(Result.self, from: data)
     }
 
-    private static func saveCache(_ spaces: [GreenSpace], center: RouteCoordinate, radius: Double) {
-        try? JSONEncoder().encode(spaces).write(to: cacheURL(center: center, radius: radius), options: .atomic)
+    private static func saveCache(_ result: Result, center: RouteCoordinate, radius: Double) {
+        try? JSONEncoder().encode(result).write(to: cacheURL(center: center, radius: radius), options: .atomic)
+    }
+}
+
+/// Lässt genau einen Aufrufer durch (für das Rennen zwischen Ergebnis und Frist).
+private final class OnceFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var claimed = false
+
+    func claim() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if claimed { return false }
+        claimed = true
+        return true
     }
 }

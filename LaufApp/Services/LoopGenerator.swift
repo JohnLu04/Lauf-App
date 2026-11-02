@@ -9,9 +9,11 @@ struct LoopSuggestion: Identifiable {
     /// z. B. ["Bürgerpark", "Wald"]
     var highlights: [String]
 
-    /// Führt durch Grünflächen (sonst geometrische Runde)
+    /// Führt durch Grünflächen oder am Wasser entlang (sonst geometrische Runde)
     var isGreen = false
     var elevation: ElevationProfile?
+    /// Anteil der Strecke nahe an Flüssen oder Seen (0…1)
+    var waterShare: Double = 0
 
     var title: String {
         highlights.isEmpty ? "Rundkurs" : highlights.prefix(2).joined(separator: " · ")
@@ -24,7 +26,10 @@ struct LoopSuggestion: Identifiable {
 /// - Dreieck Start → Grünfläche A → Grünfläche B → Start (Flächen weiter weg)
 /// - Kreis durch eine Grünfläche (Flächen in der Nähe; Größe passend zur Wunschdistanz)
 /// - Drachenform zu einer einzelnen Fläche
+/// - Uferrunde entlang eines Flusses (ein Ufer hin, anderes Ufer zurück, oder nur ein Ufer)
 /// - Geometrischer Kreis (Viereck) in eine Richtung, falls nichts Grünes passt
+///
+/// Wegpunkte, die im Wasser liegen, werden vor der Wegsuche ans Ufer verschoben.
 ///
 /// Echte Wege sind länger als die Luftlinie. Der Umwegfaktor startet bei 1,3 und lernt aus jeder
 /// berechneten Runde dazu; Kreisrunden werden damit neu gebaut, bis die Länge passt (±15 %).
@@ -42,6 +47,8 @@ enum LoopGenerator {
         case circle(bearing: Double)
         /// Kreis durch eine Grünfläche, `side` = ±1 (links/rechts der Verbindungslinie)
         case through(point: RouteCoordinate, side: Double)
+        /// Am Fluss entlang ab `anchor` (Meter auf der Mittellinie) in Richtung `direction` (±1)
+        case river(Waterway, anchor: Double, direction: Double, side: Double, bothBanks: Bool)
     }
 
     struct Plan {
@@ -51,6 +58,10 @@ enum LoopGenerator {
         var straightLength: Double
         var shape: Shape
         var score: Double
+        /// Fluss, an dem die Runde entlangführt
+        var waterName: String? = nil
+
+        var labels: [String] { (waterName.map { [$0] } ?? []) + spaces.map(\.label) }
 
         func estimate(detour: Double) -> Double { straightLength * detour }
 
@@ -71,6 +82,7 @@ enum LoopGenerator {
     /// Kandidaten, beste zuerst: höchstens `maxGreen` Grünflächen-Runden in unterschiedliche
     /// Richtungen, aufgefüllt mit geometrischen Runden.
     static func plans(start: RouteCoordinate, target: Double, spaces: [GreenSpace],
+                      water: WaterFeatures = WaterFeatures(), preferWater: Bool = false,
                       detour: Double = initialDetour, maxGreen: Int = 3, total: Int = 6,
                       geometricSpacing: Double = 90) -> [Plan] {
         let radius = target / (squarePerimeter * detour)
@@ -118,6 +130,27 @@ enum LoopGenerator {
                 green.append(Plan(waypoints: [left, a.point, right], spaces: [a.space], straightLength: straight,
                                   shape: .fixed, score: a.space.score - 0.5 - 4 * deviation))
             }
+        }
+
+        // Uferrunden an Flüssen in der Nähe (beide Richtungen, beide Ufer oder nur eines)
+        for river in water.rivers {
+            guard let loc = river.locate(start), loc.distance < target * 0.3 else { continue }
+            for bothBanks in [true, false] {
+                for direction in [1.0, -1.0] {
+                    guard let draft = riverPlan(start: start, river: river, anchor: loc.along, direction: direction,
+                                                side: loc.side, bothBanks: bothBanks, length: 1000) else { continue }
+                    var plan = rebuild(draft, start: start, target: target, detour: detour)
+                    let deviation = abs(plan.estimate(detour: detour) - target) / target
+                    guard deviation < 0.25 else { continue }
+                    plan.score = 3.0 + (river.name != nil ? 0.3 : 0) + (bothBanks ? 0.3 : 0)
+                        + (preferWater ? 5 : 0) - 4 * deviation
+                    green.append(plan)
+                }
+            }
+        }
+        // Mit „Am Wasser entlang“ auch Runden zu Seen bevorzugen
+        if preferWater {
+            for i in green.indices where green[i].spaces.contains(where: { $0.kind == .water }) { green[i].score += 3 }
         }
 
         // Abwechslung: keine Fläche doppelt, Richtungen mindestens 50° auseinander
@@ -178,6 +211,24 @@ enum LoopGenerator {
                     shape: .through(point: point, side: side), score: 0)
     }
 
+    /// Uferrunde: Wegpunkte am Ufer ab `anchor` über `length` Meter flussauf- oder -abwärts,
+    /// bei `bothBanks` am anderen Ufer zurück (dazwischen über eine Brücke).
+    static func riverPlan(start: RouteCoordinate, river: Waterway, anchor: Double, direction: Double,
+                          side: Double, bothBanks: Bool, length: Double) -> Plan? {
+        let end = min(max(anchor + direction * length, 0), river.length)
+        let reach = abs(end - anchor)
+        guard reach >= 400 else { return nil }
+        let marks = [0.0, 0.5, 1.0].map { anchor + direction * reach * $0 }
+        var points = marks.compactMap { river.bankPoint(at: $0, side: side) }
+        if bothBanks { points += marks.reversed().compactMap { river.bankPoint(at: $0, side: -side) } }
+        guard points.count == (bothBanks ? 6 : 3) else { return nil }
+        let all = [start] + points + [start]
+        let straight = zip(all, all.dropFirst()).reduce(0) { $0 + $1.0.distance(to: $1.1) }
+        return Plan(waypoints: points, spaces: [], straightLength: straight,
+                    shape: .river(river, anchor: anchor, direction: direction, side: side, bothBanks: bothBanks),
+                    score: 0, waterName: river.label)
+    }
+
     /// Baut eine skalierbare Runde mit neuem Umwegfaktor passend zur Wunschdistanz neu.
     static func rebuild(_ plan: Plan, start: RouteCoordinate, target: Double, detour: Double) -> Plan {
         // Der Radius wird so gewählt, dass Luftlinie × Umwegfaktor ≈ Wunschdistanz
@@ -199,6 +250,20 @@ enum LoopGenerator {
             rebuilt.spaces = plan.spaces
             rebuilt.score = plan.score
             return rebuilt
+        case let .river(river, anchor, direction, side, bothBanks):
+            // Länge am Fluss schrittweise anpassen, bis Luftlinie × Umwegfaktor ≈ Wunschdistanz
+            var length = target / detour / (bothBanks ? 2.4 : 1.8)
+            var best: Plan?
+            for _ in 0..<5 {
+                guard var candidate = riverPlan(start: start, river: river, anchor: anchor, direction: direction,
+                                                side: side, bothBanks: bothBanks, length: length) else { break }
+                candidate.score = plan.score
+                best = candidate
+                let ratio = target / (candidate.straightLength * detour)
+                if abs(ratio - 1) < 0.03 { break }
+                length *= ratio
+            }
+            return best ?? plan
         }
     }
 
@@ -206,20 +271,22 @@ enum LoopGenerator {
 
     /// Berechnet bis zu `count` Rundkurse entlang der Wege. `progress` meldet den Fortschritt.
     static func suggestions(start: RouteCoordinate, target: Double, spaces: [GreenSpace], count: Int = 3,
-                            avoidClimbs: Bool = false,
+                            avoidClimbs: Bool = false, water: WaterFeatures = WaterFeatures(), preferWater: Bool = false,
                             progress: @MainActor (String) -> Void) async -> [LoopSuggestion] {
         var accepted: [LoopSuggestion] = []
         var acceptedBearings: [Double] = []
         var detour = initialDetour
         // Für flache Runden mehr Richtungen ausprobieren
         var candidates = avoidClimbs
-            ? plans(start: start, target: target, spaces: spaces, maxGreen: 4, total: 10, geometricSpacing: 60)
-            : plans(start: start, target: target, spaces: spaces)
+            ? plans(start: start, target: target, spaces: spaces, water: water, preferWater: preferWater,
+                    maxGreen: 4, total: 10, geometricSpacing: 60)
+            : plans(start: start, target: target, spaces: spaces, water: water, preferWater: preferWater,
+                    maxGreen: preferWater ? 4 : 3)
         if avoidClimbs {
             await progress("Höhenlage wird geprüft …")
             candidates = await sortedByClimb(candidates, start: start)
         }
-        GreenSpaceFinder.log.info("\(spaces.count) Grünflächen, \(candidates.filter { !$0.isGeometric }.count) grüne Kandidaten")
+        GreenSpaceFinder.log.info("\(spaces.count) Grünflächen, \(water.rivers.count) Flüsse, \(candidates.filter { !$0.isGeometric }.count) grüne Kandidaten: \(candidates.map(\.labels), privacy: .public)")
         for plan in candidates {
             guard accepted.count < count, !Task.isCancelled else { break }
             let bearing = plan.bearing(from: start)
@@ -230,8 +297,8 @@ enum LoopGenerator {
 
             for attempt in 0..<2 {
                 let current = rebuild(plan, start: start, target: target, detour: detour)
-                guard let routed = await route(current, start: start) else {
-                    GreenSpaceFinder.log.info("Runde verworfen (kein Weg gefunden): \(plan.spaces.map(\.label), privacy: .public)")
+                guard let routed = await route(current, start: start, water: water) else {
+                    GreenSpaceFinder.log.info("Runde verworfen (kein Weg gefunden): \(plan.labels, privacy: .public)")
                     break
                 }
                 // Umwegfaktor aus der echten Länge lernen (geglättet und begrenzt)
@@ -239,7 +306,7 @@ enum LoopGenerator {
                 // Kürzer als die Luftlinie geht nur, wenn Stichwege herausgeschnitten wurden – daraus nicht lernen
                 if observed >= 1.05 { detour = min(2.2, max(1.1, (detour + observed) / 2)) }
                 let deviation = abs(routed.distance - target) / target
-                GreenSpaceFinder.log.info("Runde \(plan.spaces.map(\.label), privacy: .public): geschätzt \(Int(current.estimate(detour: detour))) m, echt \(Int(routed.distance)) m, Umwegfaktor jetzt \(detour)")
+                GreenSpaceFinder.log.info("Runde \(plan.labels, privacy: .public): geschätzt \(Int(current.estimate(detour: detour))) m, echt \(Int(routed.distance)) m, Umwegfaktor jetzt \(detour)")
                 if deviation <= tolerance {
                     accepted.append(routed)
                     acceptedBearings.append(bearing)
@@ -260,14 +327,18 @@ enum LoopGenerator {
             }
             for i in accepted.indices { accepted[i].elevation = profiles[i] }
         }
-        if avoidClimbs {
-            // Flachste zuerst (Runden ohne Höhendaten ans Ende)
-            return accepted.sorted { ($0.elevation?.gain ?? .infinity) < ($1.elevation?.gain ?? .infinity) }
-        }
-        // Runden durch Grünflächen zuerst, dann nach Passgenauigkeit
-        return accepted.sorted {
-            if $0.isGreen != $1.isGreen { return $0.isGreen }
-            return abs($0.distance - target) < abs($1.distance - target)
+        return accepted.sorted { a, b in
+            // „Am Wasser entlang“: Runden mit viel Strecke am Wasser zuerst
+            if preferWater {
+                let (wa, wb) = (a.waterShare >= 0.3, b.waterShare >= 0.3)
+                if wa != wb { return wa }
+                if !avoidClimbs, abs(a.waterShare - b.waterShare) > 0.1 { return a.waterShare > b.waterShare }
+            }
+            // „Höhenmeter meiden“: flachste zuerst (Runden ohne Höhendaten ans Ende)
+            if avoidClimbs { return (a.elevation?.gain ?? .infinity) < (b.elevation?.gain ?? .infinity) }
+            // Sonst Runden durch Grünflächen zuerst, dann nach Passgenauigkeit
+            if a.isGreen != b.isGreen { return a.isGreen }
+            return abs(a.distance - target) < abs(b.distance - target)
         }
     }
 
@@ -286,12 +357,14 @@ enum LoopGenerator {
         }
         GreenSpaceFinder.log.info("Geschätzte Anstiege der Kandidaten: \(climbs.map { Int($0) }, privacy: .public)")
         return zip(candidates, climbs)
-            .sorted { ($0.1 - ($0.0.spaces.isEmpty ? 0 : 10)) < ($1.1 - ($1.0.spaces.isEmpty ? 0 : 10)) }
+            .sorted { ($0.1 - ($0.0.labels.isEmpty ? 0 : 10)) < ($1.1 - ($1.0.labels.isEmpty ? 0 : 10)) }
             .map(\.0)
     }
 
-    private static func route(_ plan: Plan, start: RouteCoordinate) async -> LoopSuggestion? {
-        let points = [start] + plan.waypoints + [start]
+    private static func route(_ plan: Plan, start: RouteCoordinate, water: WaterFeatures) async -> LoopSuggestion? {
+        // Punkte im Wasser würden zu Umwegen über die nächste Brücke führen
+        let waypoints = plan.waypoints.map(water.movedOutOfWater)
+        let points = [start] + waypoints + [start]
         let segments = await withTaskGroup(of: (Int, RoutePlanner.Segment).self) { group in
             for (i, (a, b)) in zip(points, points.dropFirst()).enumerated() {
                 group.addTask { (i, await RoutePlanner.segment(from: a, to: b, followPaths: true)) }
@@ -308,14 +381,19 @@ enum LoopGenerator {
         // Keine „Lollis“: Runden, die zu großen Teilen auf demselben Weg zurückführen, verwerfen
         let retraced = retracedShare(path)
         guard retraced <= 0.2 else {
-            GreenSpaceFinder.log.info("Runde verworfen (\(Int(retraced * 100)) % doppelt gelaufen): \(plan.spaces.map(\.label), privacy: .public)")
+            GreenSpaceFinder.log.info("Runde verworfen (\(Int(retraced * 100)) % doppelt gelaufen): \(plan.labels, privacy: .public)")
             return nil
         }
         var highlights: [String] = []
-        for space in plan.spaces where !highlights.contains(space.label) { highlights.append(space.label) }
+        for label in plan.labels where !highlights.contains(label) { highlights.append(label) }
+        let waterShare = water.shareNearWater(path)
         if plan.isGeometric { highlights = ["Richtung \(Geo.compassName(plan.bearing(from: start)))"] }
-        return LoopSuggestion(waypoints: plan.waypoints, path: path, distance: RouteGeometry.length(path),
-                              highlights: highlights, isGreen: !plan.spaces.isEmpty)
+        // Führt eine andere Runde zu großen Teilen am Fluss entlang, den Fluss mit anzeigen
+        if plan.waterName == nil, waterShare >= 0.4, let name = water.nearestName(to: path), !highlights.contains(name) {
+            highlights.insert(name, at: 0)
+        }
+        return LoopSuggestion(waypoints: waypoints, path: path, distance: RouteGeometry.length(path),
+                              highlights: highlights, isGreen: !plan.labels.isEmpty, waterShare: waterShare)
     }
 
     // MARK: - Hilfen
