@@ -20,6 +20,8 @@ struct RouteEditorView: View {
     @State private var showSave = false
     @State private var name = ""
     @State private var loaded = false
+    @State private var elevation: ElevationProfile?
+    @State private var isLoadingElevation = false
 
     private var path: [RouteCoordinate] {
         guard let first = waypoints.first else { return [] }
@@ -97,10 +99,31 @@ struct RouteEditorView: View {
                 Button("Sichern") { save() }
                 Button("Abbrechen", role: .cancel) {}
             } message: {
-                Text("\(Format.distance(distance, decimals: 1)) · ca. \(Format.duration(estimatedTime))")
+                Text("\(Format.distance(distance, decimals: 1)) · ca. \(Format.duration(estimatedTime))"
+                     + (elevation.map { " · ↑ \(Int($0.gain.rounded())) m" } ?? ""))
             }
             .onAppear(perform: load)
+            // Höhenprofil neu berechnen, sobald sich die Strecke nicht mehr ändert
+            .task(id: elevationKey) { await updateElevation() }
         }
+    }
+
+    private var elevationKey: String {
+        pendingCalculations > 0 ? "rechnet" : "\(path.count)-\(Int(distance))-\(path.first?.latitude ?? 0)"
+    }
+
+    private func updateElevation() async {
+        guard pendingCalculations == 0, path.count > 1 else {
+            if path.count < 2 { elevation = nil }
+            return
+        }
+        try? await Task.sleep(for: .milliseconds(600))
+        guard !Task.isCancelled else { return }
+        isLoadingElevation = true
+        let profile = await ElevationService.profile(for: path)
+        guard !Task.isCancelled else { return }
+        elevation = profile
+        isLoadingElevation = false
     }
 
     // MARK: - Bedienung
@@ -111,9 +134,16 @@ struct RouteEditorView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Format.distance(distance, decimals: 2))
                         .font(.title2.bold().monospacedDigit())
-                    Text(waypoints.count < 2 ? "Noch keine Strecke" : "ca. \(Format.duration(estimatedTime))\(isLoop ? " · Rundkurs" : "")")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 8) {
+                        Text(waypoints.count < 2 ? "Noch keine Strecke" : "ca. \(Format.duration(estimatedTime))\(isLoop ? " · Rundkurs" : "")")
+                        if waypoints.count >= 2, let elevation {
+                            ElevationLabel(gain: elevation.gain, loss: isLoop ? nil : elevation.loss)
+                        } else if isLoadingElevation {
+                            Text("Höhe …")
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
                 Spacer()
                 if pendingCalculations > 0 { ProgressView() }
@@ -121,6 +151,10 @@ struct RouteEditorView: View {
                     .toggleStyle(.button)
                     .font(.caption.bold())
                     .onChange(of: followPaths) { _, _ in recalculateAll() }
+            }
+            if waypoints.count >= 2, let elevation, elevation.elevations.count > 2 {
+                ElevationMiniChart(profile: elevation)
+                    .frame(height: 44)
             }
             HStack(spacing: 8) {
                 controlButton("Rückgängig", "arrow.uturn.backward", disabled: waypoints.isEmpty, action: undo)
@@ -240,8 +274,11 @@ struct RouteEditorView: View {
             route.waypoints = waypoints
             route.path = path
             route.followsPaths = followPaths
+            route.elevation = elevation   // nach `path`, weil das Setzen des Verlaufs das Profil zurücksetzt
         } else {
-            context.insert(PlannedRoute(name: finalName, waypoints: waypoints, path: path, followsPaths: followPaths))
+            let route = PlannedRoute(name: finalName, waypoints: waypoints, path: path, followsPaths: followPaths)
+            route.elevation = elevation
+            context.insert(route)
         }
         try? context.save()
         dismiss()

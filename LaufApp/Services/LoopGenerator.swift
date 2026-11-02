@@ -11,6 +11,7 @@ struct LoopSuggestion: Identifiable {
 
     /// Führt durch Grünflächen (sonst geometrische Runde)
     var isGreen = false
+    var elevation: ElevationProfile?
 
     var title: String {
         highlights.isEmpty ? "Rundkurs" : highlights.prefix(2).joined(separator: " · ")
@@ -70,7 +71,8 @@ enum LoopGenerator {
     /// Kandidaten, beste zuerst: höchstens `maxGreen` Grünflächen-Runden in unterschiedliche
     /// Richtungen, aufgefüllt mit geometrischen Runden.
     static func plans(start: RouteCoordinate, target: Double, spaces: [GreenSpace],
-                      detour: Double = initialDetour, maxGreen: Int = 3, total: Int = 6) -> [Plan] {
+                      detour: Double = initialDetour, maxGreen: Int = 3, total: Int = 6,
+                      geometricSpacing: Double = 90) -> [Plan] {
         let radius = target / (squarePerimeter * detour)
         // Erreichbare Flächen mit ihrem Zielpunkt
         let list = Array(spaces
@@ -134,7 +136,7 @@ enum LoopGenerator {
             .sorted { minAngle($0, used) > minAngle($1, used) }
         var geometricBearings: [Double] = []
         for b in directions where result.count + geometricBearings.count < total {
-            if geometricBearings.allSatisfy({ angleBetween($0, b) >= 90 }) { geometricBearings.append(b) }
+            if geometricBearings.allSatisfy({ angleBetween($0, b) >= geometricSpacing }) { geometricBearings.append(b) }
         }
         for b in geometricBearings {
             result.append(circlePlan(start: start, bearing: b, radius: radius))
@@ -204,11 +206,19 @@ enum LoopGenerator {
 
     /// Berechnet bis zu `count` Rundkurse entlang der Wege. `progress` meldet den Fortschritt.
     static func suggestions(start: RouteCoordinate, target: Double, spaces: [GreenSpace], count: Int = 3,
+                            avoidClimbs: Bool = false,
                             progress: @MainActor (String) -> Void) async -> [LoopSuggestion] {
         var accepted: [LoopSuggestion] = []
         var acceptedBearings: [Double] = []
         var detour = initialDetour
-        let candidates = plans(start: start, target: target, spaces: spaces)
+        // Für flache Runden mehr Richtungen ausprobieren
+        var candidates = avoidClimbs
+            ? plans(start: start, target: target, spaces: spaces, maxGreen: 4, total: 10, geometricSpacing: 60)
+            : plans(start: start, target: target, spaces: spaces)
+        if avoidClimbs {
+            await progress("Höhenlage wird geprüft …")
+            candidates = await sortedByClimb(candidates, start: start)
+        }
         GreenSpaceFinder.log.info("\(spaces.count) Grünflächen, \(candidates.filter { !$0.isGeometric }.count) grüne Kandidaten")
         for plan in candidates {
             guard accepted.count < count, !Task.isCancelled else { break }
@@ -226,7 +236,8 @@ enum LoopGenerator {
                 }
                 // Umwegfaktor aus der echten Länge lernen (geglättet und begrenzt)
                 let observed = routed.distance / max(1, current.straightLength)
-                detour = min(2.2, max(1.1, (detour + observed) / 2))
+                // Kürzer als die Luftlinie geht nur, wenn Stichwege herausgeschnitten wurden – daraus nicht lernen
+                if observed >= 1.05 { detour = min(2.2, max(1.1, (detour + observed) / 2)) }
                 let deviation = abs(routed.distance - target) / target
                 GreenSpaceFinder.log.info("Runde \(plan.spaces.map(\.label), privacy: .public): geschätzt \(Int(current.estimate(detour: detour))) m, echt \(Int(routed.distance)) m, Umwegfaktor jetzt \(detour)")
                 if deviation <= tolerance {
@@ -237,11 +248,46 @@ enum LoopGenerator {
                 guard plan.isScalable else { break }
             }
         }
+        // Höhenprofile der fertigen Runden
+        if !accepted.isEmpty {
+            await progress("Höhenmeter werden berechnet …")
+            let paths = accepted.map(\.path)
+            let profiles = await withTaskGroup(of: (Int, ElevationProfile?).self) { group in
+                for (i, path) in paths.enumerated() { group.addTask { (i, await ElevationService.profile(for: path)) } }
+                var result = [ElevationProfile?](repeating: nil, count: paths.count)
+                for await (i, profile) in group { result[i] = profile }
+                return result
+            }
+            for i in accepted.indices { accepted[i].elevation = profiles[i] }
+        }
+        if avoidClimbs {
+            // Flachste zuerst (Runden ohne Höhendaten ans Ende)
+            return accepted.sorted { ($0.elevation?.gain ?? .infinity) < ($1.elevation?.gain ?? .infinity) }
+        }
         // Runden durch Grünflächen zuerst, dann nach Passgenauigkeit
         return accepted.sorted {
             if $0.isGreen != $1.isGreen { return $0.isGreen }
             return abs($0.distance - target) < abs($1.distance - target)
         }
+    }
+
+    /// Ordnet die Kandidaten nach geschätztem Anstieg zwischen ihren Wegpunkten (eine Anfrage für alle).
+    /// Runden durch Grünflächen bekommen einen kleinen Bonus (10 m), damit sie bei ähnlicher Höhe vorne bleiben.
+    static func sortedByClimb(_ candidates: [Plan], start: RouteCoordinate) async -> [Plan] {
+        let points = [start] + candidates.flatMap(\.waypoints)
+        guard let heights = try? await ElevationService.elevations(points), heights.count == points.count
+        else { return candidates }
+        var index = 1
+        let climbs: [Double] = candidates.map { plan in
+            let own = heights[index..<index + plan.waypoints.count]
+            index += plan.waypoints.count
+            let sequence = [heights[0]] + own + [heights[0]]
+            return zip(sequence, sequence.dropFirst()).reduce(0) { $0 + max(0, $1.1 - $1.0) }
+        }
+        GreenSpaceFinder.log.info("Geschätzte Anstiege der Kandidaten: \(climbs.map { Int($0) }, privacy: .public)")
+        return zip(candidates, climbs)
+            .sorted { ($0.1 - ($0.0.spaces.isEmpty ? 0 : 10)) < ($1.1 - ($1.0.spaces.isEmpty ? 0 : 10)) }
+            .map(\.0)
     }
 
     private static func route(_ plan: Plan, start: RouteCoordinate) async -> LoopSuggestion? {

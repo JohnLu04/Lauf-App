@@ -115,8 +115,11 @@ struct RouteRow: View {
                 .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 10))
             VStack(alignment: .leading, spacing: 3) {
                 Text(route.name).font(.headline)
-                Text(Format.distance(route.distance, decimals: 1) + (route.isLoop ? " · Rundkurs" : ""))
-                    .font(.caption)
+                HStack(spacing: 6) {
+                    Text(Format.distance(route.distance, decimals: 1) + (route.isLoop ? " · Rundkurs" : ""))
+                    if route.hasElevation { ElevationLabel(gain: route.elevationGain) }
+                }
+                .font(.caption)
                 .foregroundStyle(.secondary)
             }
             Spacer()
@@ -125,6 +128,13 @@ struct RouteRow: View {
             }
         }
         .contentShape(Rectangle())
+        // Ältere Routen ohne (oder mit veraltetem) Höhenprofil nachträglich ergänzen
+        .task(id: route.id) {
+            guard route.elevation?.isCurrent != true, let profile = await ElevationService.profile(for: route.path)
+            else { return }
+            route.elevation = profile
+            try? route.modelContext?.save()
+        }
     }
 }
 

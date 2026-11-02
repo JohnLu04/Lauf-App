@@ -14,6 +14,7 @@ struct RouteSuggestView: View {
     @Query(filter: #Predicate<TrainingPlan> { $0.isActive == true }) private var plans: [TrainingPlan]
 
     @State private var targetKm = 5.0
+    @AppStorage("avoidClimbs") private var avoidClimbs = false
     @State private var suggestions: [LoopSuggestion] = []
     @State private var selectedID: UUID?
     @State private var status: String?
@@ -79,6 +80,10 @@ struct RouteSuggestView: View {
                 }
                 .fixedSize()
             }
+            Toggle(isOn: $avoidClimbs) {
+                Label("Höhenmeter meiden", systemImage: "mountain.2")
+                    .font(.subheadline)
+            }
             HStack(spacing: 6) {
                 ForEach([3.0, 5, 8, 10, 15], id: \.self) { km in
                     Button("\(Int(km)) km") { targetKm = km }
@@ -107,6 +112,10 @@ struct RouteSuggestView: View {
                     Text(status).font(.caption).foregroundStyle(.secondary)
                 }
             } else {
+                if let profile = selected?.elevation, profile.elevations.count > 2 {
+                    ElevationMiniChart(profile: profile)
+                        .frame(height: 40)
+                }
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(suggestions) { suggestion in
@@ -139,6 +148,9 @@ struct RouteSuggestView: View {
             // Andere Distanz: alte Vorschläge passen nicht mehr
             if !suggestions.isEmpty { suggestions = []; selectedID = nil; status = nil }
         }
+        .onChange(of: avoidClimbs) { _, _ in
+            if !suggestions.isEmpty { suggestions = []; selectedID = nil; status = nil }
+        }
     }
 
     private func suggestionCard(_ suggestion: LoopSuggestion) -> some View {
@@ -152,7 +164,14 @@ struct RouteSuggestView: View {
                     .frame(width: 48, height: 48)
                     .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 8))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(Format.distance(suggestion.distance, decimals: 1)).font(.headline.monospacedDigit())
+                    HStack(spacing: 6) {
+                        Text(Format.distance(suggestion.distance, decimals: 1)).font(.headline.monospacedDigit())
+                        if let elevation = suggestion.elevation {
+                            ElevationLabel(gain: elevation.gain)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     Text(suggestion.title).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                 }
                 .frame(width: 130, alignment: .leading)
@@ -178,7 +197,8 @@ struct RouteSuggestView: View {
         searchTask = Task {
             let found = await GreenSpaceFinder.find(near: start, radius: target * 0.45)
             source = found.source
-            let result = await LoopGenerator.suggestions(start: start, target: target, spaces: found.spaces) { text in
+            let result = await LoopGenerator.suggestions(start: start, target: target, spaces: found.spaces,
+                                                         avoidClimbs: avoidClimbs) { text in
                 status = text
             }
             guard !Task.isCancelled else { return }
@@ -200,6 +220,7 @@ struct RouteSuggestView: View {
             + (selected.highlights.first.map { " · \($0)" } ?? "")
         let route = PlannedRoute(name: name, waypoints: [selected.path[0]] + selected.waypoints + [selected.path[0]],
                                  path: selected.path, followsPaths: true)
+        route.elevation = selected.elevation
         context.insert(route)
         try? context.save()
         selection?.wrappedValue = route

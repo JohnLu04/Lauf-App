@@ -37,6 +37,11 @@ final class PlannedRoute {
     var distance: Double = 0
     /// true = Strecke folgt Wegen, false = Luftlinie zwischen den Wegpunkten
     var followsPaths: Bool = true
+    /// Höhenmeter bergauf/bergab (0 = noch nicht berechnet, siehe `hasElevation`)
+    var elevationGain: Double = 0
+    var elevationLoss: Double = 0
+    /// Höhenprofil als JSON (ohne .externalStorage, damit die Migration klappt)
+    var elevationData: Data = Data()
 
     init(name: String, waypoints: [RouteCoordinate], path: [RouteCoordinate], followsPaths: Bool) {
         self.name = name
@@ -56,8 +61,20 @@ final class PlannedRoute {
         set {
             pathData = (try? JSONEncoder().encode(newValue)) ?? Data()
             distance = RouteGeometry.length(newValue)
+            elevation = nil
         }
     }
+
+    var elevation: ElevationProfile? {
+        get { elevationData.isEmpty ? nil : try? JSONDecoder().decode(ElevationProfile.self, from: elevationData) }
+        set {
+            elevationData = newValue.flatMap { try? JSONEncoder().encode($0) } ?? Data()
+            elevationGain = newValue?.gain ?? 0
+            elevationLoss = newValue?.loss ?? 0
+        }
+    }
+
+    var hasElevation: Bool { !elevationData.isEmpty }
 
     /// Start und Ziel liegen nah beieinander (Rundkurs)
     var isLoop: Bool {
