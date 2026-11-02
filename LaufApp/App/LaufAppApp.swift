@@ -10,6 +10,6 @@ struct LaufAppApp: App {
             RootView()
                 .environment(recorder)
         }
-        .modelContainer(for: [Run.self, TrainingPlan.self, PlannedRoute.self])
+        .modelContainer(for: [Run.self, TrainingPlan.self, PlannedRoute.self, StrengthSession.self])
     }
 }

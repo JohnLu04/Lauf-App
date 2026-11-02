@@ -39,6 +39,12 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 - Export in die Kalender-App: eigener Kalender „LaufApp Training“, ganztägig oder mit Uhrzeit und Erinnerung; wird bei Änderungen am Plan automatisch aktualisiert
 - Erkennt die App aus deinen Läufen eine bessere Form, schlägt sie neue Paces vor und zeigt eine aktualisierte Prognose
 
+**Krafttraining für Läufer** (Trainingstab → „Krafttraining“)
+- Sechs Programme auf Basis von Studien mit Läufern und Sportlern: Kraft-Basis, Maximalkraft & Laufökonomie, Plyometrie, Verletzungsprävention, Rumpf & Stabilität, Hüfte & Knie – jeweils mit Vorgaben zu Sätzen, Wiederholungen, Intensität und Pausen sowie der Studienlage
+- 23 Übungen mit animierter Figur, auf der die beanspruchten Muskeln rot hervorgehoben sind (Haupt- und unterstützende Muskeln), dazu Ausführung, häufige Fehler und der Nutzen fürs Laufen
+- Tagebuch: Sätze mit Wiederholungen, Gewicht bzw. Haltezeit und Wiederholungen in Reserve eintragen, vorbelegt mit den Werten der letzten Einheit; Übungen frei hinzufügen oder entfernen
+- Fortschritt je Übung als Diagramm (geschätztes 1RM, Gewicht, Volumen bzw. Wiederholungen oder Zeit)
+
 **Garmin & Strava**
 - Läufe deiner Garmin-Uhr automatisch übernehmen: Garmin Connect → Strava → LaufApp
 - Herzfrequenz-Verlauf mit Zeit in den 5 Herzfrequenzzonen, Schrittfrequenz-Verlauf, Route, Splits und Höhe

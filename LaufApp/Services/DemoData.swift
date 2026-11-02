@@ -5,6 +5,27 @@ import AVFoundation
 
 /// Erzeugt realistische Test-Läufe für den Simulator (nur Debug-Builds).
 enum DemoData {
+    /// Sechs Einheiten „Maximalkraft“ der letzten drei Wochen mit steigenden Gewichten
+    static func makeStrengthSessions() -> [StrengthSession] {
+        (0..<6).map { i in
+            let date = Calendar.current.date(byAdding: .day, value: -3 * (6 - i), to: .now)!
+            let session = StrengthSession(date: date, programID: "maxStrength")
+            let squat = 70 + Double(i) * 2.5
+            session.entries = [
+                StrengthEntry(exerciseID: "backSquat", sets: (0..<4).map { s in
+                    StrengthSet(reps: s == 3 && i % 2 == 0 ? 3 : 4, weight: squat, reserve: s == 3 ? 0 : 1)
+                }),
+                StrengthEntry(exerciseID: "romanianDeadlift", sets: (0..<3).map { _ in StrengthSet(reps: 6, weight: 50 + Double(i / 2) * 5) }),
+                StrengthEntry(exerciseID: "bulgarianSplitSquat", sets: (0..<3).map { _ in StrengthSet(reps: 6, weight: 16 + Double(i / 3) * 2) }),
+                StrengthEntry(exerciseID: "soleusRaise", sets: (0..<3).map { _ in StrengthSet(reps: 8, weight: 40 + Double(i) * 2.5) }),
+                StrengthEntry(exerciseID: "plank", sets: (0..<2).map { _ in StrengthSet(seconds: 40 + i * 5) }),
+            ]
+            session.durationMinutes = 45 + i
+            session.effort = 7
+            return session
+        }
+    }
+
     static func makeRun() -> Run {
         let daysAgo = Int.random(in: 0...20)
         let start = Calendar.current.date(byAdding: .day, value: -daysAgo, to: .now)!
