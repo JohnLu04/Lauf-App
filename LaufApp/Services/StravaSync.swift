@@ -297,6 +297,94 @@ final class StravaSync {
         return added
     }
 
+    // MARK: - Kudos und Kommentare
+
+    /// Übernimmt die Zahlen von Strava und lädt die Listen nur, wenn sie nicht mehr dazu passen
+    /// (oder `force` gesetzt ist). Gibt true zurück, wenn sich etwas geändert hat.
+    @discardableResult
+    func updateSocial(for run: Run, kudosCount: Int, commentCount: Int, force: Bool = false) async throws -> Bool {
+        guard let activityID = run.stravaID else { return false }
+        let before = (run.kudosCount, run.commentCount, run.kudoers, run.comments)
+        run.kudosCount = kudosCount
+        run.commentCount = commentCount
+
+        if kudosCount == 0 {
+            if !run.kudosData.isEmpty { run.kudoers = [] }
+        } else if force || run.kudoers.count != kudosCount {
+            let athletes: [StravaImport.Athlete] = try await get("/activities/\(activityID)/kudos", query: [
+                URLQueryItem(name: "per_page", value: "200"),
+            ]) ?? []
+            run.kudoers = athletes.map(StravaImport.kudoer)
+        }
+
+        if commentCount == 0 {
+            if !run.commentsData.isEmpty { run.comments = [] }
+        } else if force || run.comments.count != commentCount {
+            let comments: [StravaImport.Comment] = try await get("/activities/\(activityID)/comments", query: [
+                URLQueryItem(name: "per_page", value: "200"),
+                URLQueryItem(name: "page_size", value: "200"),
+            ]) ?? []
+            run.comments = comments.map(StravaImport.comment).sorted { $0.date < $1.date }
+        }
+        return before != (run.kudosCount, run.commentCount, run.kudoers, run.comments)
+    }
+
+    /// Lädt die Listen nach, wenn sie nicht zu den gespeicherten Zahlen passen (z. B. weil sie beim
+    /// Import wegen des Strava-Limits fehlten oder nur die Zahlen nachgetragen wurden).
+    @discardableResult
+    func loadMissingSocial(for run: Run, context: ModelContext) async throws -> Bool {
+        guard run.needsSocialRefresh else { return false }
+        let changed = try await updateSocial(for: run, kudosCount: run.kudosCount, commentCount: run.commentCount)
+        try? context.save()
+        return changed
+    }
+
+    /// Fragt die aktuellen Zahlen der Aktivität ab und lädt Kudos und Kommentare neu.
+    @discardableResult
+    func refreshSocial(for run: Run, context: ModelContext) async throws -> Bool {
+        guard let activityID = run.stravaID else { return false }
+        guard let activity: StravaImport.Activity = try await get("/activities/\(activityID)") else { return false }
+        let changed = try await updateSocial(for: run, kudosCount: activity.kudosCount ?? 0,
+                                             commentCount: activity.commentCount ?? 0, force: true)
+        try? context.save()
+        return changed
+    }
+
+    /// Kudos und Kommentare kommen oft erst Stunden nach dem Lauf: Läufe der letzten 7 Tage
+    /// werden deshalb bei jedem Synchronisieren aktualisiert. Beim ersten Mal werden außerdem
+    /// die Zahlen aller älteren Strava-Läufe nachgetragen (die Listen lädt die Laufansicht).
+    private func refreshRecentSocial(runs: [Run]) async throws {
+        let byID = Dictionary(runs.compactMap { run in run.stravaID.map { ($0, run) } }, uniquingKeysWith: { a, _ in a })
+        guard !byID.isEmpty else { return }
+
+        if !defaults.bool(forKey: "strava.socialBackfill"), let oldest = runs.compactMap({ $0.stravaID != nil ? $0.startDate : nil }).min() {
+            for page in 1...5 {
+                let batch: [StravaImport.Activity] = try await get("/athlete/activities", query: [
+                    URLQueryItem(name: "after", value: String(Int(oldest.timeIntervalSince1970) - 86_400)),
+                    URLQueryItem(name: "per_page", value: "200"),
+                    URLQueryItem(name: "page", value: String(page)),
+                ]) ?? []
+                for activity in batch {
+                    guard let run = byID[activity.id] else { continue }
+                    run.kudosCount = activity.kudosCount ?? 0
+                    run.commentCount = activity.commentCount ?? 0
+                }
+                if batch.count < 200 { break }
+            }
+            defaults.set(true, forKey: "strava.socialBackfill")
+        }
+
+        let weekAgo = Date.now.addingTimeInterval(-7 * 86_400)
+        let recent: [StravaImport.Activity] = try await get("/athlete/activities", query: [
+            URLQueryItem(name: "after", value: String(Int(weekAgo.timeIntervalSince1970))),
+            URLQueryItem(name: "per_page", value: "50"),
+        ]) ?? []
+        for activity in recent {
+            guard let run = byID[activity.id] else { continue }
+            try await updateSocial(for: run, kudosCount: activity.kudosCount ?? 0, commentCount: activity.commentCount ?? 0)
+        }
+    }
+
     // MARK: - Import
 
     /// Synchronisiert höchstens alle 5 Minuten (z. B. beim Öffnen der App).
@@ -343,10 +431,19 @@ final class StravaSync {
                     // Fotos sind ein Extra: Fehler hier sollen den Import nicht abbrechen
                     try? await importPhotos(for: run, activityID: activity.id)
                 }
+                // Kudos und Kommentare ebenfalls nur als Extra; fehlende Listen werden später nachgeladen
+                run.kudosCount = activity.kudosCount ?? 0
+                run.commentCount = activity.commentCount ?? 0
+                try? await updateSocial(for: run, kudosCount: run.kudosCount, commentCount: run.commentCount)
                 try? context.save()
                 imported += 1
             }
             if syncedUntil == nil { syncedUntil = since }
+            // Neue Kudos und Kommentare der letzten Tage; Fehler hier sollen den Import nicht als fehlgeschlagen melden
+            if let runs = try? context.fetch(FetchDescriptor<Run>()) {
+                try? await refreshRecentSocial(runs: runs)
+                try? context.save()
+            }
             lastSyncDate = .now
             lastResult = imported == 0 ? "Keine neuen Läufe." : (imported == 1 ? "1 neuer Lauf importiert." : "\(imported) neue Läufe importiert.")
         } catch {

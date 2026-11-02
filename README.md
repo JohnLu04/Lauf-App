@@ -45,6 +45,7 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 - Einrichtung mit Schritt-für-Schritt-Anleitung im Profil unter „Strava & Garmin“ (eigene, kostenlose Strava-API-Anwendung; das Client-Secret liegt nur im Schlüsselbund)
 - Bereits mit der App aufgezeichnete Läufe werden nicht doppelt importiert
 - Fotos und Videos deiner Strava-Posts werden mit importiert: Galerie mit Vollbildansicht in der Laufansicht, Vorschaubild im Feed. Videos spielt die App ab, wenn Strava die Datei herausgibt, sonst öffnet sie sie in Strava
+- Kudos und Kommentare deiner Strava-Posts: Anzahl im Feed, in der Laufansicht die Namen der Kudos-Geber und alle Kommentare. Läufe der letzten 7 Tage werden beim Öffnen der App aktualisiert, sonst über „Von Strava aktualisieren“ (nur lesen; antworten geht über den Link zu Strava)
 
 **Du (Profil)**
 - Wochen-Diagramm der letzten 12 Wochen

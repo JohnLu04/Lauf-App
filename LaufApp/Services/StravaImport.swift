@@ -18,10 +18,34 @@ enum StravaImport {
         let averageCadence: Double?
         /// Anzahl der Fotos (Strava und Instagram)
         let totalPhotoCount: Int?
+        let kudosCount: Int?
+        let commentCount: Int?
 
         var isRun: Bool {
             ["Run", "TrailRun", "VirtualRun"].contains(sportType ?? type) || type == "Run"
         }
+    }
+
+    /// Athlet in Kudos- und Kommentarlisten (Nachname meist nur als Anfangsbuchstabe)
+    struct Athlete: Decodable {
+        let firstname: String?
+        let lastname: String?
+    }
+
+    struct Comment: Decodable {
+        let id: Int
+        let text: String
+        let createdAt: Date
+        let athlete: Athlete?
+    }
+
+    static func kudoer(_ athlete: Athlete) -> StravaKudoer {
+        StravaKudoer(firstName: athlete.firstname ?? "", lastName: athlete.lastname ?? "")
+    }
+
+    static func comment(_ comment: Comment) -> StravaComment {
+        StravaComment(id: comment.id, text: comment.text, date: comment.createdAt,
+                      firstName: comment.athlete?.firstname ?? "", lastName: comment.athlete?.lastname ?? "")
     }
 
     struct Stream<T: Decodable>: Decodable {

@@ -72,6 +72,12 @@ final class Run {
     var sensorData: Data = Data()
     /// Liste der Fotos (Bilddateien liegen in `RunPhotoStore`)
     var photosData: Data = Data()
+    /// Anzahl der Kudos und Kommentare bei Strava
+    var kudosCount: Int = 0
+    var commentCount: Int = 0
+    /// Liste der Kudos-Geber bzw. Kommentare (können beim Import fehlen und werden dann nachgeladen)
+    var kudosData: Data = Data()
+    var commentsData: Data = Data()
     @Attribute(.externalStorage) var routeData: Data = Data()
     var splitsData: Data = Data()
     var bestEffortsData: Data = Data()
@@ -103,6 +109,21 @@ final class Run {
     var photos: [RunPhoto] {
         get { (try? JSONDecoder().decode([RunPhoto].self, from: photosData)) ?? [] }
         set { photosData = (try? JSONEncoder().encode(newValue)) ?? Data() }
+    }
+
+    var kudoers: [StravaKudoer] {
+        get { (try? JSONDecoder().decode([StravaKudoer].self, from: kudosData)) ?? [] }
+        set { kudosData = (try? JSONEncoder().encode(newValue)) ?? Data() }
+    }
+
+    var comments: [StravaComment] {
+        get { (try? JSONDecoder().decode([StravaComment].self, from: commentsData)) ?? [] }
+        set { commentsData = (try? JSONEncoder().encode(newValue)) ?? Data() }
+    }
+
+    /// Passen die gespeicherten Listen nicht zu den Zahlen von Strava, müssen sie nachgeladen werden.
+    var needsSocialRefresh: Bool {
+        stravaID != nil && (kudoers.count != kudosCount || comments.count != commentCount)
     }
 
     func photoURL(_ photo: RunPhoto) -> URL { RunPhotoStore.url(for: photo, runID: id) }

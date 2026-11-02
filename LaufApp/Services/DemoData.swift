@@ -72,6 +72,17 @@ enum DemoData {
             if item.kind == 1 { photo.videoFileName = makeTestVideo(id: id, runID: run.id) }
             return photo
         }
+
+        // Beispiel-Kudos und -Kommentare
+        run.kudoers = [("Anna", "M."), ("Ben", "K."), ("Clara", "S."), ("David", "W."), ("Elif", "Y."), ("Felix", "R."), ("Greta", "")]
+            .map { StravaKudoer(firstName: $0.0, lastName: $0.1) }
+        run.kudosCount = run.kudoers.count
+        run.comments = [
+            StravaComment(id: 1, text: "Starke Pace! 🔥", date: run.endDate.addingTimeInterval(1_800), firstName: "Anna", lastName: "M."),
+            StravaComment(id: 2, text: "Schöne Runde an der Saar, die muss ich auch mal laufen.", date: run.endDate.addingTimeInterval(7_200),
+                          firstName: "Felix", lastName: "R."),
+        ]
+        run.commentCount = run.comments.count
         return run
     }
 

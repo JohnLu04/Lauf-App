@@ -123,6 +123,9 @@ struct RunCardView: View {
             }
             .frame(height: 170)
             .clipShape(RoundedRectangle(cornerRadius: 12))
+            if run.kudosCount > 0 || run.commentCount > 0 {
+                SocialCountsView(kudos: run.kudosCount, comments: run.commentCount)
+            }
         }
         .card()
     }

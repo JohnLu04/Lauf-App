@@ -17,6 +17,7 @@ struct RunDetailView: View {
     @State private var photoRevision = 0
     @State private var isRefreshingPhotos = false
     @State private var photoMessage: String?
+    @State private var isLoadingSocial = false
     @Query private var allRuns: [Run]
     @State private var showEdit = false
     @State private var confirmDelete = false
@@ -51,6 +52,10 @@ struct RunDetailView: View {
                         .card()
                 }
 
+                if run.kudosCount > 0 || run.commentCount > 0 {
+                    RunSocialCard(run: run, isLoading: isLoadingSocial).card()
+                }
+
                 if !run.splits.isEmpty {
                     SplitsView(splits: run.splits).card()
                 }
@@ -79,10 +84,10 @@ struct RunDetailView: View {
             Menu {
                 Button("Bearbeiten", systemImage: "pencil") { showEdit = true }
                 if run.stravaID != nil && StravaSync.shared.isConnected {
-                    Button("Fotos & Videos von Strava aktualisieren", systemImage: "photo.badge.arrow.down") {
-                        Task { await refreshPhotos() }
+                    Button("Von Strava aktualisieren", systemImage: "arrow.triangle.2.circlepath") {
+                        Task { await refreshFromStrava() }
                     }
-                    .disabled(isRefreshingPhotos)
+                    .disabled(isRefreshingPhotos || isLoadingSocial)
                 }
                 Button("Löschen", systemImage: "trash", role: .destructive) { confirmDelete = true }
             } label: {
@@ -120,6 +125,14 @@ struct RunDetailView: View {
             if run.stravaID != nil, StravaSync.shared.isConnected, run.hasMissingPhotoFiles {
                 Task { await refreshPhotos(silentIfNothingChanged: true) }
             }
+            // Kudos-Namen und Kommentare nachladen, wenn bisher nur die Zahlen bekannt sind
+            if run.needsSocialRefresh, StravaSync.shared.isConnected {
+                Task {
+                    isLoadingSocial = true
+                    _ = try? await StravaSync.shared.loadMissingSocial(for: run, context: context)
+                    isLoadingSocial = false
+                }
+            }
             let route = run.route
             points = route
             paceSeries = RunAnalysis.paceSeries(route)
@@ -129,6 +142,36 @@ struct RunDetailView: View {
             cadenceSeries = RunAnalysis.sensorSeries(sensors) { $0.cadence }
             zoneTimes = HeartRateZones.timeInZones(sensors, maxHeartRate: HeartRateZones.maxHeartRate(runs: allRuns))
         }
+    }
+
+    /// Fotos, Videos, Kudos und Kommentare von Strava neu abfragen (Menüpunkt).
+    private func refreshFromStrava() async {
+        isRefreshingPhotos = true
+        isLoadingSocial = true
+        var parts: [String] = []
+        var failure: String?
+        do {
+            let added = try await StravaSync.shared.refreshPhotos(for: run, context: context)
+            photos = run.photos
+            photoRevision += 1
+            if added > 0 { parts.append(added == 1 ? "1 Foto/Video aktualisiert" : "\(added) Fotos/Videos aktualisiert") }
+            if run.hasMissingPhotoFiles { failure = "Einige Dateien konnten nicht von Strava geladen werden." }
+        } catch {
+            failure = error.localizedDescription
+        }
+        do {
+            if try await StravaSync.shared.refreshSocial(for: run, context: context) {
+                parts.append("Kudos & Kommentare aktualisiert")
+            }
+        } catch {
+            failure = failure ?? error.localizedDescription
+        }
+        isRefreshingPhotos = false
+        isLoadingSocial = false
+        let message = parts.isEmpty ? (failure ?? "Alles ist auf dem neuesten Stand.") : parts.joined(separator: " · ")
+        withAnimation { photoMessage = message }
+        try? await Task.sleep(for: .seconds(2.5))
+        withAnimation { photoMessage = nil }
     }
 
     private func refreshPhotos(silentIfNothingChanged: Bool = false) async {
