@@ -16,7 +16,7 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 - Rundkurs mit einem Tipp, Rückgängig, Umkehren; Distanz und geschätzte Dauer (aus deiner lockeren Pace)
 - Routen speichern, bearbeiten und vor dem Lauf auswählen
 - Optional „Am Wasser entlang“: Uferrunden an Flüssen (ein Ufer hin, anderes zurück) und Runden zu Seen; Wegpunkte im Wasser werden automatisch ans Ufer verschoben
-- Höhenmeter und Höhenprofil jeder Route (Höhendaten: Open-Meteo / Copernicus DEM); beim Vorschlagen optional „Höhenmeter meiden“ für möglichst flache Runden
+- Höhenmeter und Höhenprofil jeder Route (Höhendaten: Open-Meteo / Copernicus DEM, bei Ausfall Valhalla der FOSSGIS oder OpenTopoData); beim Vorschlagen optional „Höhenmeter meiden“ für möglichst flache Runden
 - Rundkurs vorschlagen: Wunschdistanz wählen, die App erzeugt Runden ab deinem Standort, bevorzugt durch Parks, Wälder und Grünflächen (Daten: © OpenStreetMap-Mitwirkende, ersatzweise Apple Karten)
 - Beim Laufen: Route auf der Karte, „Noch x km bis zum Ziel“, Warnung bei Abweichung (Anzeige und Sprachansage)
 
