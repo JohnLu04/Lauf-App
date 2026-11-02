@@ -11,6 +11,7 @@ struct RoutesView: View {
     @Query(sort: \PlannedRoute.createdAt, order: .reverse) private var routes: [PlannedRoute]
     @State private var editorRoute: PlannedRoute?
     @State private var showNewRoute = false
+    @State private var showSuggest = false
 
     var body: some View {
         NavigationStack {
@@ -19,10 +20,14 @@ struct RoutesView: View {
                     ContentUnavailableView {
                         Label("Noch keine Routen", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
                     } description: {
-                        Text("Plane eine Strecke auf der Karte. Die Route folgt automatisch den Wegen, auf Wunsch als Rundkurs.")
+                        Text("Lass dir Rundkurse durch Parks und Grünflächen in deiner Nähe vorschlagen oder plane selbst eine Strecke auf der Karte.")
                     } actions: {
-                        Button("Route planen") { showNewRoute = true }
-                            .buttonStyle(.borderedProminent)
+                        VStack(spacing: 10) {
+                            Button("Rundkurs vorschlagen", systemImage: "sparkle.magnifyingglass") { showSuggest = true }
+                                .buttonStyle(.borderedProminent)
+                            Button("Selbst planen", systemImage: "hand.tap") { showNewRoute = true }
+                                .buttonStyle(.bordered)
+                        }
                     }
                 } else {
                     List {
@@ -72,10 +77,22 @@ struct RoutesView: View {
                     ToolbarItem(placement: .cancellationAction) { Button("Fertig") { dismiss() } }
                 }
                 ToolbarItem(placement: .primaryAction) {
-                    Button("Neue Route", systemImage: "plus") { showNewRoute = true }
+                    Menu {
+                        Button("Rundkurs vorschlagen", systemImage: "sparkle.magnifyingglass") { showSuggest = true }
+                        Button("Selbst planen", systemImage: "hand.tap") { showNewRoute = true }
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("Neue Route")
                 }
             }
             .sheet(isPresented: $showNewRoute) { RouteEditorView() }
+            .sheet(isPresented: $showSuggest) {
+                RouteSuggestView(selection: selection) {
+                    // Beim Auswählen für den Lauf direkt zurück zum Aufnahme-Tab
+                    if selection != nil { dismiss() }
+                }
+            }
             .sheet(item: $editorRoute) { RouteEditorView(route: $0) }
         }
     }
