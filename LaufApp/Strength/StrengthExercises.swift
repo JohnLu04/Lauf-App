@@ -247,7 +247,7 @@ extension StrengthExercise {
             "Langsam absenken, bis die Ferse unter der Stufenkante ist.",
         ],
         mistakes: ["Wippen statt kontrollierter Bewegung", "Nur halbe Bewegung", "Knie beugt sich"],
-        benefit: "Die Wadenmuskulatur leistet beim Laufen ein Vielfaches des Körpergewichts. Kräftige Waden entlasten Achillessehne und Schienbein.",
+        benefit: "Die Wadenmuskeln liefern beim langsamen und mittleren Laufen den größten Teil der Stützkraft (Dorn et al. 2012). Kräftige Waden entlasten Achillessehne und Schienbein.",
         perSide: true,
         animation: ExerciseAnimation(
             frames: [
@@ -273,7 +273,7 @@ extension StrengthExercise {
             "Langsam absenken. Für mehr Belastung zusätzlich Gewicht halten oder einbeinig ausführen.",
         ],
         mistakes: ["Knie strecken sich beim Hochdrücken", "Zu schnell", "Zu leichtes Gewicht – der Soleus verträgt viel"],
-        benefit: "Der Soleus ist beim Laufen der am stärksten belastete Muskel des Unterschenkels. Mit gebeugtem Knie wird er gezielt trainiert.",
+        benefit: "Soleus und Gastrocnemius tragen beim Laufen den größten Teil der Stützkraft (Dorn et al. 2012). Mit gebeugtem Knie wird vor allem der Soleus trainiert.",
         animation: ExerciseAnimation(
             frames: [
                 Pose(hip: hip(above: ankle(toe: soleusToe, foot: 90), shin: -22, thigh: 40), torso: 12,
@@ -298,7 +298,7 @@ extension StrengthExercise {
             "Mit beiden Beinen wieder hochdrücken. Auch mit leicht gebeugtem Knie ausführen.",
         ],
         mistakes: ["Zu schnell absenken", "Auf einem Bein hochdrücken (die Hubphase ist bewusst beidbeinig)"],
-        benefit: "Das klassische Programm nach Alfredson bei Achillessehnenbeschwerden; stärkt Sehne und Wade für hohe Laufumfänge.",
+        benefit: "Das klassische Programm nach Alfredson (1998) bei Achillessehnenbeschwerden: im Original 3 × 15 mit gestrecktem und 3 × 15 mit gebeugtem Knie, zweimal täglich über 12 Wochen. Stärkt Sehne und Wade.",
         perSide: true,
         animation: ExerciseAnimation(
             frames: [
@@ -368,7 +368,7 @@ extension StrengthExercise {
             "Wenn du nicht mehr halten kannst, mit den Händen abfangen und dich mit den Armen zurückdrücken.",
         ],
         mistakes: ["In der Hüfte abknicken", "Zu schnell fallen lassen", "Zu viele Wiederholungen zu Beginn – Muskelkater ist anfangs stark"],
-        benefit: "Bremsendes (exzentrisches) Training der Oberschenkelrückseite, das in Studien Zerrungen deutlich verringert hat.",
+        benefit: "Bremsendes (exzentrisches) Training der Oberschenkelrückseite. Bei Amateurfußballern senkte es Verletzungen der Oberschenkelrückseite um rund zwei Drittel.",
         usesWeight: false,
         animation: ExerciseAnimation(
             frames: [
@@ -392,7 +392,7 @@ extension StrengthExercise {
             "Position halten bzw. langsam absenken und wieder anheben. Anfänger legen das Knie statt des Knöchels auf.",
         ],
         mistakes: ["Hüfte hängt durch", "Schulter weicht nach oben aus", "Zu Beginn mit gestrecktem Bein überfordern"],
-        benefit: "Kräftigt die Adduktoren an der Innenseite des Oberschenkels; ein Programm damit senkte Leistenprobleme in einer großen Studie um rund 40 %.",
+        benefit: "Kräftigt die Adduktoren an der Innenseite des Oberschenkels; ein Programm damit senkte bei Fußballern das Risiko für Leistenprobleme um 41 %.",
         measure: .seconds, perSide: true, usesWeight: false,
         animation: ExerciseAnimation(
             frames: [
@@ -416,7 +416,7 @@ extension StrengthExercise {
             "Oben kurz halten und langsam absenken. Danach Seite wechseln.",
         ],
         mistakes: ["Becken rollt nach hinten", "Bein wandert nach vorn", "Zu hoch heben"],
-        benefit: "Gezieltes Training der seitlichen Hüftmuskeln. Bei Läufern mit Läuferknie (ITBS) führte es in einer Studie zu deutlicher Besserung.",
+        benefit: "Gezieltes Training der seitlichen Hüftmuskeln. Läufer mit Läuferknie (ITBS) hatten in einer Studie schwächere Hüftabduktoren; nach 6 Wochen Kräftigung waren fast alle wieder schmerzfrei.",
         perSide: true, usesWeight: false,
         animation: ExerciseAnimation(
             frames: [
@@ -563,7 +563,7 @@ extension StrengthExercise {
             "Weich in einer halben Kniebeuge landen, aufrichten und wieder hinuntersteigen (nicht springen).",
         ],
         mistakes: ["Box zu hoch", "Harte Landung mit gestreckten Knien", "Rückwärts herunterspringen"],
-        benefit: "Steigert die explosive Kraft der Beine. Explosives Training verbesserte in Studien Laufökonomie und 5-km-Zeit.",
+        benefit: "Steigert die explosive Kraft der Beine. Explosiv- und Sprungtraining verbesserte in Studien Laufökonomie sowie 3- und 5-km-Zeiten.",
         usesWeight: false,
         animation: ExerciseAnimation(
             frames: [

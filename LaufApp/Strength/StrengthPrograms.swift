@@ -65,9 +65,9 @@ extension StrengthProgram {
         ],
         studies: [
             StrengthStudy(citation: "Lauersen, Bertelsen & Andersen (2014), Br J Sports Med",
-                          finding: "Meta-Analyse aus 25 Studien: Krafttraining senkte Sportverletzungen auf weniger als ein Drittel."),
+                          finding: "Meta-Analyse aus 25 Studien mit über 26.000 Sportlern: Krafttraining senkte Sportverletzungen auf weniger als ein Drittel, Dehnen hatte keinen Effekt."),
             StrengthStudy(citation: "Blagrove, Howatson & Hayes (2018), Sports Medicine",
-                          finding: "Übersichtsarbeit: Krafttraining verbessert Laufökonomie und Leistung von Mittel- und Langstreckenläufern."),
+                          finding: "Übersichtsarbeit aus 24 Studien: Krafttraining verbessert Laufökonomie, Zeitlaufleistung und Sprintfähigkeit von Mittel- und Langstreckenläufern; VO₂max und Körperzusammensetzung bleiben meist unverändert."),
         ],
         items: [
             ProgramItem(exerciseID: "gobletSquat", sets: 3, target: 10, intensity: "mittel (2–3 Wdh. Reserve)", rest: "90 s"),
@@ -93,9 +93,9 @@ extension StrengthProgram {
             StrengthStudy(citation: "Støren et al. (2008), Med Sci Sports Exerc",
                           finding: "8 Wochen halbtiefe Kniebeugen (4 × 4, 3× pro Woche) verbesserten bei gut trainierten Läufern die Laufökonomie um 5 % und die Zeit bis zur Erschöpfung um 21 %."),
             StrengthStudy(citation: "Balsalobre-Fernández, Santos-Concejero & Grivas (2016), J Strength Cond Res",
-                          finding: "Meta-Analyse: Krafttraining verbessert die Laufökonomie hochtrainierter Läufer deutlich."),
+                          finding: "Meta-Analyse aus 5 Studien mit 93 hochtrainierten Läufern: 8–12 Wochen Krafttraining (2–3× pro Woche) verbesserten die Laufökonomie deutlich."),
             StrengthStudy(citation: "Beattie et al. (2017), J Strength Cond Res",
-                          finding: "40 Wochen Krafttraining verbesserten bei Langstreckenläufern Maximalkraft, Reaktivkraft und Laufökonomie, ohne das Körpergewicht zu erhöhen."),
+                          finding: "40 Wochen Krafttraining verbesserten bei Wettkampf-Langstreckenläufern Maximalkraft, Reaktivkraft, Laufökonomie und die Geschwindigkeit bei VO₂max – ohne Veränderung von Körpergewicht oder Muskelmasse."),
         ],
         items: [
             ProgramItem(exerciseID: "backSquat", sets: 4, target: 4, intensity: "schwer, ca. 85–90 % (1 Wdh. Reserve)", rest: "2–3 min"),
@@ -118,11 +118,11 @@ extension StrengthProgram {
         ],
         studies: [
             StrengthStudy(citation: "Paavolainen et al. (1999), J Appl Physiol",
-                          finding: "9 Wochen Explosivkrafttraining verbesserten bei Ausdauerathleten Laufökonomie und 5-km-Zeit."),
+                          finding: "9 Wochen, in denen ein Drittel des Trainings durch Explosivkrafttraining ersetzt wurde, verbesserten bei gut trainierten Ausdauersportlern Laufökonomie und 5-km-Zeit."),
             StrengthStudy(citation: "Spurrs, Murphy & Watsford (2003), Eur J Appl Physiol",
-                          finding: "6 Wochen Plyometrie verbesserten Laufökonomie und 3-km-Zeit bei Läufern."),
+                          finding: "6 Wochen Plyometrie zusätzlich zum Lauftraining verbesserten bei 17 Läufern die Laufökonomie und die 3-km-Zeit um 2,7 %."),
             StrengthStudy(citation: "Saunders et al. (2006), J Strength Cond Res",
-                          finding: "9 Wochen Plyometrie verbesserten die Laufökonomie hochtrainierter Mittel- und Langstreckenläufer."),
+                          finding: "9 Wochen Plyometrie (3 × 30 min pro Woche) verbesserten bei hochtrainierten Mittel- und Langstreckenläufern die Laufökonomie bei 18 km/h um 4 %, bei langsameren Tempi nicht."),
         ],
         items: [
             ProgramItem(exerciseID: "pogoJumps", sets: 3, target: 20, intensity: "schnell, federnd", rest: "60 s"),
@@ -135,7 +135,7 @@ extension StrengthProgram {
         id: "prevention", name: "Verletzungsprävention", subtitle: "Achillessehne, Oberschenkel, Leiste",
         icon: "cross.case.fill", level: "Alle Stufen",
         frequency: "2× pro Woche", duration: "25–30 min", equipment: "Matte, Bank, Stufe",
-        description: "Übungen, die in Studien typische Läuferverletzungen verringert haben: Zerrungen der Oberschenkelrückseite, Leistenprobleme und Achillessehnenbeschwerden.",
+        description: "Übungen, die in Studien Zerrungen der Oberschenkelrückseite und Leistenprobleme verringert bzw. bei Achillessehnenbeschwerden geholfen haben. Die Studien zu Nordic Curls und Copenhagen Plank stammen aus dem Fußball, die Belastung der Muskeln ist beim Laufen aber ähnlich.",
         why: "Viele Laufverletzungen entstehen, wenn Muskeln und Sehnen der Belastung nicht gewachsen sind. Bremsendes (exzentrisches) Training macht sie belastbarer.",
         tips: [
             "Nordic Curls am Anfang mit wenigen Wiederholungen beginnen – der Muskelkater ist in den ersten Wochen stark.",
@@ -143,11 +143,11 @@ extension StrengthProgram {
         ],
         studies: [
             StrengthStudy(citation: "van der Horst et al. (2015), Am J Sports Med",
-                          finding: "Nordic Hamstring Curls verringerten bei Amateurfußballern die Zahl der Verletzungen der Oberschenkelrückseite deutlich."),
+                          finding: "25 Einheiten Nordic Hamstring Curls in 13 Wochen senkten bei 579 Amateurfußballern die Verletzungsrate der Oberschenkelrückseite um rund zwei Drittel (0,25 statt 0,8 Verletzungen pro 1000 Stunden)."),
             StrengthStudy(citation: "Harøy et al. (2019), Br J Sports Med",
-                          finding: "Das Adduktorenprogramm mit Copenhagen Plank senkte Leistenprobleme um 41 %."),
+                          finding: "Ein Programm mit der Copenhagen-Übung senkte bei 652 Fußballern das Risiko für Leistenprobleme um 41 % (Häufigkeit in der Saison 13,5 % statt 21,3 %)."),
             StrengthStudy(citation: "Alfredson et al. (1998), Am J Sports Med",
-                          finding: "12 Wochen schweres exzentrisches Wadentraining führten bei chronischen Achillessehnenbeschwerden zur Rückkehr zum Laufen."),
+                          finding: "Nach 12 Wochen schwerem exzentrischem Wadentraining konnten alle 15 Freizeitsportler mit chronischen Achillessehnenbeschwerden wieder voll laufen; in der konventionell behandelten Vergleichsgruppe musste dagegen bei allen operiert werden."),
             StrengthStudy(citation: "Lauersen, Bertelsen & Andersen (2014), Br J Sports Med",
                           finding: "Krafttraining senkte Sportverletzungen auf weniger als ein Drittel."),
         ],
@@ -171,7 +171,7 @@ extension StrengthProgram {
         ],
         studies: [
             StrengthStudy(citation: "Sato & Mokha (2009), J Strength Cond Res",
-                          finding: "6 Wochen Rumpfkrafttraining verbesserten bei Freizeitläufern die 5000-m-Zeit."),
+                          finding: "6 Wochen Rumpfkrafttraining verbesserten bei Freizeitläufern die 5000-m-Zeit, aber nicht die Stabilität der Beine (kleine Studie mit 20 Teilnehmern)."),
         ],
         items: [
             ProgramItem(exerciseID: "plank", sets: 3, target: 45, intensity: "Körpergewicht", rest: "30 s"),
@@ -193,9 +193,9 @@ extension StrengthProgram {
         ],
         studies: [
             StrengthStudy(citation: "Fredericson et al. (2000), Clin J Sport Med",
-                          finding: "Läufer mit Läuferknie hatten schwächere Hüftabduktoren; nach 6 Wochen Hüfttraining waren 22 von 24 wieder schmerzfrei beim Laufen."),
+                          finding: "Läufer mit Läuferknie (ITBS) hatten schwächere Hüftabduktoren; nach 6 Wochen Reha mit Schwerpunkt Hüftabduktoren waren 22 von 24 schmerzfrei und liefen wieder (Fallserie ohne Vergleichsgruppe)."),
             StrengthStudy(citation: "Ferber et al. (2015), J Athl Train",
-                          finding: "Hüft- und Rumpftraining verringerte Schmerzen hinter der Kniescheibe genauso gut wie Knietraining und wirkte schneller."),
+                          finding: "Studie mit 199 Betroffenen: Hüft- und Rumpftraining verringerte Schmerzen hinter der Kniescheibe genauso gut wie Knietraining; die Schmerzen gingen eine Woche früher zurück."),
         ],
         items: [
             ProgramItem(exerciseID: "sideLyingAbduction", sets: 3, target: 15, intensity: "kontrolliert", rest: "45 s"),
