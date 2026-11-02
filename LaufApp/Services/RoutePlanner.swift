@@ -8,6 +8,8 @@ enum RoutePlanner {
         var coordinates: [RouteCoordinate]
         /// false, wenn kein Weg gefunden wurde und die Luftlinie verwendet wird
         var followsPaths: Bool
+        /// true, wenn die Wegsuche an einer fehlenden Internetverbindung gescheitert ist
+        var networkError = false
     }
 
     static func segment(from start: RouteCoordinate, to end: RouteCoordinate, followPaths: Bool) async -> Segment {
@@ -18,6 +20,7 @@ enum RoutePlanner {
         request.source = MKMapItem(placemark: MKPlacemark(coordinate: start.coordinate))
         request.destination = MKMapItem(placemark: MKPlacemark(coordinate: end.coordinate))
         request.transportType = .walking
+        if NetworkMonitor.simulateOffline { return Segment(coordinates: [start, end], followsPaths: false, networkError: true) }
         do {
             let response = try await MKDirections(request: request).calculate()
             guard let route = response.routes.first else { return straight }
@@ -33,7 +36,9 @@ enum RoutePlanner {
             }
             return Segment(coordinates: result, followsPaths: true)
         } catch {
-            return straight
+            var failed = straight
+            failed.networkError = NetworkMonitor.isNetworkError(error)
+            return failed
         }
     }
 }

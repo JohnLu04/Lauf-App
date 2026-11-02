@@ -270,9 +270,17 @@ enum LoopGenerator {
     // MARK: - Wegsuche
 
     /// Berechnet bis zu `count` Rundkurse entlang der Wege. `progress` meldet den Fortschritt.
+    /// Ergebnis der Vorschlagssuche
+    struct SearchResult {
+        var suggestions: [LoopSuggestion]
+        /// Mindestens eine Wegsuche ist an der Internetverbindung gescheitert
+        var networkFailed: Bool
+    }
+
     static func suggestions(start: RouteCoordinate, target: Double, spaces: [GreenSpace], count: Int = 3,
                             avoidClimbs: Bool = false, water: WaterFeatures = WaterFeatures(), preferWater: Bool = false,
-                            progress: @MainActor (String) -> Void) async -> [LoopSuggestion] {
+                            progress: @MainActor (String) -> Void) async -> SearchResult {
+        var networkFailed = false
         var accepted: [LoopSuggestion] = []
         var acceptedBearings: [Double] = []
         var detour = initialDetour
@@ -287,7 +295,7 @@ enum LoopGenerator {
             candidates = await sortedByClimb(candidates, start: start)
         }
         GreenSpaceFinder.log.info("\(spaces.count) Grünflächen, \(water.rivers.count) Flüsse, \(candidates.filter { !$0.isGeometric }.count) grüne Kandidaten: \(candidates.map(\.labels), privacy: .public)")
-        for plan in candidates {
+        candidateLoop: for plan in candidates {
             guard accepted.count < count, !Task.isCancelled else { break }
             let bearing = plan.bearing(from: start)
             if acceptedBearings.contains(where: { angleBetween($0, bearing) < 45 }) { continue }
@@ -297,7 +305,13 @@ enum LoopGenerator {
 
             for attempt in 0..<2 {
                 let current = rebuild(plan, start: start, target: target, detour: detour)
-                guard let routed = await route(current, start: start, water: water) else {
+                let (routed, failedOffline) = await route(current, start: start, water: water)
+                if failedOffline {
+                    networkFailed = true
+                    // Ohne Verbindung scheitern alle weiteren Runden genauso – gleich aufhören
+                    if accepted.isEmpty { break candidateLoop }
+                }
+                guard let routed else {
                     GreenSpaceFinder.log.info("Runde verworfen (kein Weg gefunden): \(plan.labels, privacy: .public)")
                     break
                 }
@@ -327,7 +341,7 @@ enum LoopGenerator {
             }
             for i in accepted.indices { accepted[i].elevation = profiles[i] }
         }
-        return accepted.sorted { a, b in
+        let sorted = accepted.sorted { a, b in
             // „Am Wasser entlang“: Runden mit viel Strecke am Wasser zuerst
             if preferWater {
                 let (wa, wb) = (a.waterShare >= 0.3, b.waterShare >= 0.3)
@@ -340,6 +354,7 @@ enum LoopGenerator {
             if a.isGreen != b.isGreen { return a.isGreen }
             return abs(a.distance - target) < abs(b.distance - target)
         }
+        return SearchResult(suggestions: sorted, networkFailed: networkFailed)
     }
 
     /// Ordnet die Kandidaten nach geschätztem Anstieg zwischen ihren Wegpunkten (eine Anfrage für alle).
@@ -361,7 +376,10 @@ enum LoopGenerator {
             .map(\.0)
     }
 
-    private static func route(_ plan: Plan, start: RouteCoordinate, water: WaterFeatures) async -> LoopSuggestion? {
+    /// Berechnet die Wege einer Runde. Liefert zusätzlich, ob die Wegsuche an der Verbindung gescheitert ist.
+    private static func route(_ plan: Plan, start: RouteCoordinate, water: WaterFeatures)
+        async -> (suggestion: LoopSuggestion?, networkFailed: Bool)
+    {
         // Punkte im Wasser würden zu Umwegen über die nächste Brücke führen
         let waypoints = plan.waypoints.map(water.movedOutOfWater)
         let points = [start] + waypoints + [start]
@@ -373,16 +391,17 @@ enum LoopGenerator {
             for await (i, segment) in group { result[i] = segment }
             return result.compactMap { $0 }
         }
+        if segments.contains(where: \.networkError) { return (nil, true) }
         // Längere Abschnitte ohne gefundenen Weg (Luftlinie) sind kein brauchbarer Vorschlag
         guard segments.count == points.count - 1,
               !segments.contains(where: { !$0.followsPaths && RouteGeometry.length($0.coordinates) > 150 })
-        else { return nil }
+        else { return (nil, false) }
         let path = removeSpurs(segments.reduce([start]) { $0 + $1.coordinates.dropFirst() })
         // Keine „Lollis“: Runden, die zu großen Teilen auf demselben Weg zurückführen, verwerfen
         let retraced = retracedShare(path)
         guard retraced <= 0.2 else {
             GreenSpaceFinder.log.info("Runde verworfen (\(Int(retraced * 100)) % doppelt gelaufen): \(plan.labels, privacy: .public)")
-            return nil
+            return (nil, false)
         }
         var highlights: [String] = []
         for label in plan.labels where !highlights.contains(label) { highlights.append(label) }
@@ -392,8 +411,8 @@ enum LoopGenerator {
         if plan.waterName == nil, waterShare >= 0.4, let name = water.nearestName(to: path), !highlights.contains(name) {
             highlights.insert(name, at: 0)
         }
-        return LoopSuggestion(waypoints: waypoints, path: path, distance: RouteGeometry.length(path),
-                              highlights: highlights, isGreen: !plan.labels.isEmpty, waterShare: waterShare)
+        return (LoopSuggestion(waypoints: waypoints, path: path, distance: RouteGeometry.length(path),
+                               highlights: highlights, isGreen: !plan.labels.isEmpty, waterShare: waterShare), false)
     }
 
     // MARK: - Hilfen

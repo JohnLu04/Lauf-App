@@ -18,6 +18,7 @@ struct RouteSuggestView: View {
     @AppStorage("preferWater") private var preferWater = false
     /// Hinweis unter den Vorschlägen (z. B. keine Gewässer gefunden)
     @State private var note: String?
+    @State private var showNetworkError = false
     @State private var suggestions: [LoopSuggestion] = []
     @State private var selectedID: UUID?
     @State private var status: String?
@@ -49,6 +50,12 @@ struct RouteSuggestView: View {
                 }
             }
             .onDisappear { searchTask?.cancel() }
+            .alert("Routenerstellung fehlgeschlagen", isPresented: $showNetworkError) {
+                Button("Erneut versuchen") { search() }
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(NetworkMonitor.message)
+            }
         }
     }
 
@@ -202,6 +209,12 @@ struct RouteSuggestView: View {
     private func search() {
         guard let start else { return }
         searchTask?.cancel()
+        // Ohne Verbindung gar nicht erst suchen (sonst erst nach der Wartezeit eine Meldung)
+        guard NetworkMonitor.shared.isOnline else {
+            status = nil
+            showNetworkError = true
+            return
+        }
         let target = targetKm * 1000
         suggestions = []
         selectedID = nil
@@ -212,13 +225,22 @@ struct RouteSuggestView: View {
             let found = await GreenSpaceFinder.find(near: start, radius: target * 0.45)
             source = found.source
             let water = found.result.water
-            let result = await LoopGenerator.suggestions(start: start, target: target, spaces: found.result.spaces,
+            let search = await LoopGenerator.suggestions(start: start, target: target, spaces: found.result.spaces,
                                                          avoidClimbs: avoidClimbs, water: water,
                                                          preferWater: preferWater) { text in
                 status = text
             }
+            let result = search.suggestions
             guard !Task.isCancelled else { return }
             isSearching = false
+            if search.networkFailed, result.isEmpty {
+                status = nil
+                showNetworkError = true
+                return
+            }
+            if search.networkFailed {
+                note = "Einige Runden konnten wegen der Internetverbindung nicht berechnet werden."
+            }
             suggestions = result
             selectedID = result.first?.id
             if let rect = boundingRect(result.flatMap(\.path)) {
@@ -227,7 +249,7 @@ struct RouteSuggestView: View {
             status = result.isEmpty
                 ? "Keine passende Runde gefunden. Versuch eine andere Distanz oder plane die Route selbst."
                 : nil
-            if preferWater, !result.contains(where: { $0.waterShare >= 0.3 }) {
+            if note == nil, preferWater, !result.contains(where: { $0.waterShare >= 0.3 }) {
                 note = found.source == .appleMaps
                     ? "Gewässerdaten werden noch geladen. Tippe gleich noch einmal auf „Neu suchen“."
                     : (water.isEmpty ? "Keine Flüsse oder Seen in der Nähe gefunden."

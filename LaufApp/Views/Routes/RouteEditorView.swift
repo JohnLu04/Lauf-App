@@ -22,6 +22,12 @@ struct RouteEditorView: View {
     @State private var loaded = false
     @State private var elevation: ElevationProfile?
     @State private var isLoadingElevation = false
+    @State private var showNetworkError = false
+    /// Meldung nur einmal je Fehlerserie zeigen, nicht bei jedem weiteren Wegpunkt
+    @State private var networkErrorShown = false
+
+    /// Abschnitte, deren Wegsuche an der Internetverbindung gescheitert ist (als Luftlinie gezeichnet)
+    private var hasNetworkErrors: Bool { followPaths && segments.contains(where: \.networkError) }
 
     private var path: [RouteCoordinate] {
         guard let first = waypoints.first else { return [] }
@@ -75,7 +81,19 @@ struct RouteEditorView: View {
             }
             .safeAreaInset(edge: .bottom) { controls }
             .overlay(alignment: .top) {
-                if waypoints.isEmpty {
+                if hasNetworkErrors {
+                    Button {
+                        retryFailedSegments()
+                    } label: {
+                        Label("Wege konnten nicht berechnet werden – erneut versuchen", systemImage: "wifi.exclamationmark")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(Color.orange, in: Capsule())
+                    }
+                    .padding(.top, 8)
+                } else if waypoints.isEmpty {
                     hint("Tippe auf die Karte, um den Startpunkt zu setzen.")
                 } else if waypoints.count == 1 {
                     hint("Tippe weitere Punkte, die Route folgt den Wegen.")
@@ -101,6 +119,12 @@ struct RouteEditorView: View {
             } message: {
                 Text("\(Format.distance(distance, decimals: 1)) · ca. \(Format.duration(estimatedTime))"
                      + (elevation.map { " · ↑ \(Int($0.gain.rounded())) m" } ?? ""))
+            }
+            .alert("Routenerstellung fehlgeschlagen", isPresented: $showNetworkError) {
+                Button("Erneut versuchen") { retryFailedSegments() }
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(NetworkMonitor.message + " Bis dahin wird die Luftlinie angezeigt.")
             }
             .onAppear(perform: load)
             // Höhenprofil neu berechnen, sobald sich die Strecke nicht mehr ändert
@@ -227,6 +251,20 @@ struct RouteEditorView: View {
             guard index < segments.count, waypoints[index] == start, waypoints[index + 1] == end,
                   follow == followPaths else { return }
             segments[index] = segment
+            if segment.networkError, !networkErrorShown {
+                networkErrorShown = true
+                showNetworkError = true
+            } else if !hasNetworkErrors {
+                networkErrorShown = false
+            }
+        }
+    }
+
+    /// Berechnet alle Abschnitte erneut, die an der Verbindung gescheitert sind.
+    private func retryFailedSegments() {
+        networkErrorShown = false
+        for (i, segment) in segments.enumerated() where segment.networkError {
+            calculate(index: i, from: waypoints[i], to: waypoints[i + 1])
         }
     }
 
