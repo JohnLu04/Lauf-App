@@ -17,12 +17,21 @@ struct RunSourceBadge: View {
         .fixedSize()
         .foregroundStyle(color)
         .background(color.opacity(0.13), in: Capsule())
-        .accessibilityLabel(source == .app ? "Mit LaufApp aufgezeichnet" : "Importiert aus \(source.name)")
+        .accessibilityLabel(accessibilityText)
+    }
+
+    private var accessibilityText: String {
+        switch source {
+        case .app: "Mit LaufApp aufgezeichnet"
+        case .manual: "Von Hand eingetragen"
+        default: "Importiert aus \(source.name)"
+        }
     }
 
     private var icon: String {
         switch source {
         case .app: "record.circle"
+        case .manual: "square.and.pencil"
         case .strava: "arrow.triangle.2.circlepath"
         case .health: "heart.fill"
         }
@@ -31,6 +40,7 @@ struct RunSourceBadge: View {
     private var color: Color {
         switch source {
         case .app: .accentColor
+        case .manual: .blue
         case .strava: Color(red: 0.99, green: 0.30, blue: 0.01)   // Strava-Orange
         case .health: Color(red: 0.98, green: 0.17, blue: 0.33)   // Health-Rot
         }

@@ -50,8 +50,12 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 - Läufe, die schon von Strava importiert oder mit LaufApp aufgezeichnet wurden, werden nicht doppelt angelegt; liegt ein Lauf in beiden Quellen, wird er verknüpft
 - Einrichtung im Profil unter „Apple Health“
 
+**Läufe nachtragen**
+- Über „+“ auf der Startseite einen Lauf ohne Aufzeichnung eintragen: Datum, Distanz, Zeit, optional eine gespeicherte Route (mit Karte und Höhenprofil), Höhenmeter, Herzfrequenz, Anstrengung und Notizen
+- Wird auf Wunsch der Einheit des Trainingsplans an diesem Tag zugeordnet; Distanz und Zeit lassen sich später bearbeiten
+
 **Herkunft im Feed**
-- Jede Aktivität zeigt, woher sie stammt: LaufApp, Strava oder Apple Health
+- Jede Aktivität zeigt, woher sie stammt: LaufApp, Manuell, Strava oder Apple Health
 
 **Garmin & Strava**
 - Läufe deiner Garmin-Uhr automatisch übernehmen: Garmin Connect → Strava → LaufApp

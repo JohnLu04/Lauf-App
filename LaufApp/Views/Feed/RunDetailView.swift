@@ -137,7 +137,8 @@ struct RunDetailView: View {
             }
             let route = run.route
             points = route
-            paceSeries = RunAnalysis.paceSeries(route)
+            // Bei eingetragenen Läufen ist der Pace-Verlauf unbekannt (Zeiten nur gleichmäßig verteilt)
+            paceSeries = run.isManual ? [] : RunAnalysis.paceSeries(route)
             elevationSeries = RunAnalysis.elevationSeries(route)
             let sensors = run.sensorSamples
             heartRateSeries = RunAnalysis.sensorSeries(sensors) { $0.heartRate }
@@ -207,7 +208,7 @@ struct RunDetailView: View {
         case (true, true): return "Importiert aus Strava und \(health)"
         case (true, false): return "Importiert aus Strava"
         case (false, true): return "Importiert aus \(health)"
-        default: return "Mit LaufApp aufgezeichnet"
+        default: return run.isManual ? "Von Hand eingetragen" : "Mit LaufApp aufgezeichnet"
         }
     }
 
@@ -472,11 +473,27 @@ struct ElevationChart: View {
 struct EditRunView: View {
     @Bindable var run: Run
     @Environment(\.dismiss) private var dismiss
+    @State private var distanceText = ""
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Titel") { TextField("Titel", text: $run.title) }
+                if run.isManual {
+                    Section("Distanz und Zeit") {
+                        DatePicker("Start", selection: $run.startDate, in: ...Date.now)
+                        HStack {
+                            Text("Distanz")
+                            Spacer()
+                            TextField("0,0", text: $distanceText)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.trailing)
+                                .frame(width: 90)
+                            Text("km").foregroundStyle(.secondary)
+                        }
+                        DurationPicker("Zeit", duration: $run.movingTime)
+                    }
+                }
                 Section("Notizen") {
                     TextField("Wie lief's?", text: $run.notes, axis: .vertical).lineLimit(3...8)
                 }
@@ -487,8 +504,32 @@ struct EditRunView: View {
             .navigationTitle("Lauf bearbeiten")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Fertig") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Fertig") {
+                        if run.isManual { applyManualChanges() }
+                        dismiss()
+                    }
+                }
             }
+            .onAppear { distanceText = ManualRunView.format(run.distance / 1000, decimals: 2) }
+        }
+    }
+}
+
+extension EditRunView {
+    /// Distanz und Zeit eines eingetragenen Laufs übernehmen; die Zeiten der Route folgen mit.
+    private func applyManualChanges() {
+        if let km = ManualRunView.number(distanceText), km > 0 { run.distance = km * 1000 }
+        run.elapsedTime = run.movingTime
+        run.endDate = run.startDate.addingTimeInterval(run.movingTime)
+        var points = run.route
+        if let first = points.first?.timestamp, let last = points.last?.timestamp, last > first {
+            let span = last.timeIntervalSince(first)
+            for i in points.indices {
+                let f = points[i].timestamp.timeIntervalSince(first) / span
+                points[i].timestamp = run.startDate.addingTimeInterval(run.movingTime * f)
+            }
+            run.route = points
         }
     }
 }

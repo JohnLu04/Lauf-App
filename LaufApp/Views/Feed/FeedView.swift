@@ -3,6 +3,7 @@ import SwiftData
 
 struct FeedView: View {
     @Query(sort: \Run.startDate, order: .reverse) private var runs: [Run]
+    @State private var showManualRun = false
 
     var body: some View {
         NavigationStack {
@@ -12,6 +13,8 @@ struct FeedView: View {
                         Label("Noch keine Läufe", systemImage: "figure.run")
                     } description: {
                         Text("Starte deinen ersten Lauf im Tab „Aufnehmen“. Er erscheint danach hier.")
+                    } actions: {
+                        Button("Lauf manuell hinzufügen", systemImage: "square.and.pencil") { showManualRun = true }
                     }
                     .padding(.top, 80)
                 } else {
@@ -30,6 +33,12 @@ struct FeedView: View {
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Aktivitäten")
             .navigationDestination(for: Run.self) { RunDetailView(run: $0) }
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Lauf hinzufügen", systemImage: "plus") { showManualRun = true }
+                }
+            }
+            .sheet(isPresented: $showManualRun) { ManualRunView() }
         }
     }
 }

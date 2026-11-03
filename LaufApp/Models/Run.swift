@@ -59,7 +59,8 @@ final class Run {
     /// 0 = keine Angabe, sonst 1–10
     var perceivedEffort: Int = 0
     var plannedWorkoutID: UUID?
-    /// Herkunft: "" = mit der App aufgezeichnet, "strava" = von Strava, "health" = aus Apple Health
+    /// Herkunft: "" = mit der App aufgezeichnet, "manual" = von Hand eingetragen, "strava" = von Strava,
+    /// "health" = aus Apple Health
     var source: String = ""
     var stravaID: Int?
     /// UUID des Trainings in Apple Health
@@ -148,12 +149,15 @@ final class Run {
 
     var isFromHealth: Bool { source == "health" }
 
+    var isManual: Bool { source == "manual" }
+
     /// Woher der Lauf stammt (ein Lauf kann gleichzeitig in Strava und Apple Health liegen)
     var sources: [RunSource] {
         var result: [RunSource] = []
         if isFromStrava || stravaID != nil { result.append(.strava) }
         if isFromHealth || healthID != nil { result.append(.health) }
         if source.isEmpty { result.insert(.app, at: 0) }
+        if isManual { result.insert(.manual, at: 0) }
         return result
     }
 
@@ -166,12 +170,13 @@ final class Run {
 
 /// Herkunft eines Laufs.
 enum RunSource: String, Identifiable {
-    case app, strava, health
+    case app, manual, strava, health
     var id: String { rawValue }
 
     var name: String {
         switch self {
         case .app: "LaufApp"
+        case .manual: "Manuell"
         case .strava: "Strava"
         case .health: "Apple Health"
         }
