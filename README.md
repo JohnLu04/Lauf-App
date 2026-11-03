@@ -95,25 +95,51 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 ```
 LaufApp/
 ├── App/            App-Start und Tab-Leiste
-├── Models/         Datenmodell eines Laufs (SwiftData) und Auswertung (Splits, Bestzeiten)
-├── Services/       GPS-Recorder mit Sprachansagen, Demo-Daten
+├── Models/         Datenmodelle (SwiftData): Läufe, Routen, Krafttraining-Tagebuch, Fotos, Kudos
+├── Services/       GPS-Aufzeichnung mit Sprachansagen, Strava- und Apple-Health-Import,
+│                   Routenplanung und Rundkurs-Vorschläge, Höhendaten, Live-Aktivität
+├── Strength/       Krafttraining: Programme, Übungen, 3D-Figur (SceneKit)
 ├── Training/       VDOT-Berechnung, Plangenerator, Plan-Datenmodell
-├── Utilities/      Formatierung, Geo-Berechnungen
-└── Views/          Oberflächen: Feed, Aufnehmen, Training, Profil
+├── Utilities/      Formatierung, Geo-Berechnungen, Schlüsselbund
+├── Resources/      3D-Modell der Übungsfigur
+└── Views/          Oberflächen: Feed, Aufnehmen, Routen, Training, Krafttraining, Profil
+LaufAppWidget/      Widget-Erweiterung für die Live-Aktivität
+Shared/             Gemeinsamer Code von App und Erweiterung
 ```
 
 ## Technik
 
-- iOS 17+, SwiftUI, SwiftData, MapKit, Swift Charts, CoreLocation, AVFoundation
-- Keine externen Abhängigkeiten
+- iOS 17+, SwiftUI, SwiftData, MapKit, Swift Charts, CoreLocation, AVFoundation, EventKit,
+  HealthKit, ActivityKit/WidgetKit, SceneKit
+- Externe Dienste ohne Schlüssel: OpenStreetMap (Overpass), Open-Meteo, Valhalla (FOSSGIS), OpenTopoData;
+  Strava über die eigene API-Anwendung
+- Keine externen Bibliotheken
 
 ## Ideen für später
 
-- Apple Health / Apple Watch (Herzfrequenz, Workouts in Health speichern)
-- Live Activity auf dem Sperrbildschirm
-- Auto-Pause
-- Routenplanung und Segmente
-- GPX-Import und -Export
+**Laufen und Aufzeichnung**
+- Auto-Pause: Aufzeichnung pausiert automatisch an Ampeln und läuft beim Weiterlaufen weiter
+- Läufe in Apple Health speichern (damit sie in Fitness und bei Ringen mitzählen)
+- Apple-Watch-App zum Aufzeichnen ohne iPhone
+- Herzfrequenz-Brustgurt per Bluetooth direkt in der App
+- Intervall-Ansagen per Vibration (Haptik) statt nur per Sprache
+
+**Routen und Strecken**
+- GPX-Import und -Export (Routen aus Komoot, Strava oder Garmin übernehmen und weitergeben)
+- Segmente: Bestzeiten auf wiederkehrenden Abschnitten, z. B. „Saarufer Staden–Brücke“
+- Hinweise zu Wetter, Sonnenuntergang und Beleuchtung bei der Routenwahl
+
+**Training**
+- Krafteinheiten in den Laufplan einplanen (an lockeren Tagen) und in den Kalender exportieren
+- Trainingsbelastung und Erholung (akute vs. chronische Belastung) mit Warnung bei zu schneller Steigerung
+- Schuh-Kilometer zählen mit Hinweis, wenn ein Paar ausgetauscht werden sollte
+- Widget für den Home-Bildschirm: Wochenkilometer und nächste Einheit
+- Siri-Kurzbefehle („Starte einen lockeren Lauf“)
+
+**Teilen und Strava**
+- Strava-Anmeldung für alle Nutzer über einen kleinen Token-Server (ohne eigene API-Anwendung)
+- Mit LaufApp aufgezeichnete Läufe zu Strava hochladen
+- Teilen-Bild eines Laufs (Karte und Kennzahlen) für Instagram oder WhatsApp
 
 ## Lizenzen
 
