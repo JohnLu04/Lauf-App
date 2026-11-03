@@ -26,6 +26,7 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 - Detailansicht: Karte, Kilometer-Splits, Pace-Diagramm, Höhenprofil, Höhenmeter
 - Bestleistungen pro Lauf (400 m, 1 km, Meile, 5 km, 10 km, HM, Marathon)
 - Titel, Notizen und gefühlte Anstrengung (1–10)
+- Eigene Fotos und Videos anhängen: direkt beim Speichern nach dem Lauf oder später in der Laufansicht (aus der Mediathek oder mit der Kamera), mit Beschreibung; eigene Fotos lassen sich wieder löschen
 
 **Training**
 - Trainingspläne für 5 km, 10 km, Halbmarathon und Marathon

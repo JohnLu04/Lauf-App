@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-/// Nach dem Beenden: Titel, Notizen und Anstrengung eintragen, dann speichern oder verwerfen.
+/// Nach dem Beenden: Titel, Notizen, Anstrengung und Fotos eintragen, dann speichern oder verwerfen.
 struct SaveRunView: View {
     let draft: RunDraft
     @Environment(RunRecorder.self) private var recorder
@@ -9,6 +9,7 @@ struct SaveRunView: View {
     @State private var title: String
     @State private var notes = ""
     @State private var effort = 0
+    @State private var photos: [PendingPhoto] = []
     @State private var confirmDiscard = false
 
     init(draft: RunDraft) {
@@ -45,6 +46,7 @@ struct SaveRunView: View {
                 Section("Gefühlte Anstrengung") {
                     EffortSlider(effort: $effort)
                 }
+                PendingPhotosSection(photos: $photos)
                 Section {
                     Button("Lauf verwerfen", role: .destructive) { confirmDiscard = true }
                 }
@@ -57,7 +59,10 @@ struct SaveRunView: View {
                 }
             }
             .confirmationDialog("Lauf wirklich verwerfen?", isPresented: $confirmDiscard, titleVisibility: .visible) {
-                Button("Verwerfen", role: .destructive) { recorder.clearDraft() }
+                Button("Verwerfen", role: .destructive) {
+                    photos.forEach { $0.discard() }
+                    recorder.clearDraft()
+                }
             }
         }
     }
@@ -66,6 +71,7 @@ struct SaveRunView: View {
         let run = RunAnalysis.makeRun(from: draft,
                                       title: title.isEmpty ? RunAnalysis.defaultTitle(for: draft.startDate) : title,
                                       notes: notes, effort: effort)
+        PhotoAttachment.attach(photos, to: run)
         context.insert(run)
         try? context.save()
         recorder.clearDraft()

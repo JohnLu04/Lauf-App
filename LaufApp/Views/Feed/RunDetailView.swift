@@ -18,6 +18,9 @@ struct RunDetailView: View {
     @State private var isRefreshingPhotos = false
     @State private var photoMessage: String?
     @State private var isLoadingSocial = false
+    @State private var showPhotoLibrary = false
+    @State private var showCamera = false
+    @State private var isAddingPhotos = false
     @State private var showSaveRoute = false
     @State private var routeName = ""
     @Query private var allRuns: [Run]
@@ -51,9 +54,22 @@ struct RunDetailView: View {
                 statsGrid.card()
 
                 if !photos.isEmpty {
-                    RunPhotoGallery(run: run, photos: photos)
+                    RunPhotoGallery(run: run, photos: photos, showLibrary: $showPhotoLibrary, showCamera: $showCamera,
+                                    isAdding: isAddingPhotos)
                         .id(photoRevision)
                         .card()
+                } else {
+                    AddPhotoButton(showLibrary: $showPhotoLibrary, showCamera: $showCamera) {
+                        HStack {
+                            Label("Fotos hinzufügen", systemImage: "photo.badge.plus").font(.headline)
+                            Spacer()
+                            if isAddingPhotos { ProgressView() } else { Image(systemName: "plus") }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .disabled(isAddingPhotos)
+                    .card()
                 }
 
                 if run.kudosCount > 0 || run.commentCount > 0 {
@@ -87,6 +103,10 @@ struct RunDetailView: View {
         .toolbar {
             Menu {
                 Button("Bearbeiten", systemImage: "pencil") { showEdit = true }
+                Button("Fotos hinzufügen", systemImage: "photo.badge.plus") { showPhotoLibrary = true }
+                if CameraPicker.isAvailable {
+                    Button("Foto aufnehmen", systemImage: "camera") { showCamera = true }
+                }
                 if points.count > 1, !run.isManual {
                     Button("Als Route speichern", systemImage: "point.topleft.down.to.point.bottomright.curvepath") {
                         routeName = PlannedRoute.defaultName(for: run)
@@ -105,6 +125,22 @@ struct RunDetailView: View {
             }
         }
         .sheet(isPresented: $showEdit) { EditRunView(run: run) }
+        .photoAttachmentPickers(showLibrary: $showPhotoLibrary, showCamera: $showCamera,
+                                isLoading: $isAddingPhotos) { added in
+            let videos = added.filter(\.isVideo).count
+            let count = PhotoAttachment.attach(added, to: run)
+            try? context.save()
+            guard count > 0 else { return }
+            let noun = videos == 0 ? (count == 1 ? "Foto" : "Fotos")
+                : videos == count ? (count == 1 ? "Video" : "Videos") : "Fotos & Videos"
+            Task {
+                withAnimation { photoMessage = "\(count) \(noun) hinzugefügt." }
+                try? await Task.sleep(for: .seconds(2))
+                withAnimation { photoMessage = nil }
+            }
+        }
+        // Fotos neu anzeigen, wenn welche hinzugefügt, gelöscht oder beschriftet wurden
+        .onChange(of: run.photosData) { _, _ in photos = run.photos }
         .alert("Als Route speichern", isPresented: $showSaveRoute) {
             TextField("Name", text: $routeName)
             Button("Sichern") { saveAsRoute() }

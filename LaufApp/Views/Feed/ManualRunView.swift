@@ -19,6 +19,7 @@ struct ManualRunView: View {
     @State private var effort = 0
     @State private var notes = ""
     @State private var linkWorkout = true
+    @State private var photos: [PendingPhoto] = []
     @FocusState private var focused: Bool
 
     private var distance: Double { (Self.number(distanceText) ?? 0) * 1000 }
@@ -97,6 +98,8 @@ struct ManualRunView: View {
                         .focused($focused)
                 }
 
+                PendingPhotosSection(photos: $photos)
+
                 if let workout = plannedWorkout {
                     Section {
                         Toggle(isOn: $linkWorkout) {
@@ -113,7 +116,12 @@ struct ManualRunView: View {
             .navigationTitle("Lauf hinzufügen")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Abbrechen") { dismiss() } }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Abbrechen") {
+                        photos.forEach { $0.discard() }
+                        dismiss()
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Sichern") { save() }.disabled(!canSave)
                 }
@@ -166,6 +174,7 @@ struct ManualRunView: View {
         }
         if linkWorkout, let workout = plannedWorkout { run.plannedWorkoutID = workout.id }
         // Keine Splits und Bestzeiten: Ohne Aufzeichnung ist der Verlauf der Pace unbekannt.
+        PhotoAttachment.attach(photos, to: run)
         context.insert(run)
         try? context.save()
         dismiss()

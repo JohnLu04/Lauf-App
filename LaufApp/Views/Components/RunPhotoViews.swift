@@ -52,6 +52,10 @@ struct VideoBadge: View {
 struct RunPhotoGallery: View {
     let run: Run
     let photos: [RunPhoto]
+    /// Zum Hinzufügen eigener Fotos (zeigt dann eine Kachel „Hinzufügen“ am Ende)
+    var showLibrary: Binding<Bool>?
+    var showCamera: Binding<Bool>?
+    var isAdding = false
     @State private var selection: RunPhoto?
 
     private var title: String {
@@ -74,12 +78,20 @@ struct RunPhotoGallery: View {
                             selection = photo
                         } label: {
                             LocalPhotoView(url: run.photoURL(photo), maxPixelSize: 500)
-                                .frame(width: photos.count == 1 ? 300 : 150, height: 150)
+                                .frame(width: photos.count == 1 ? (showLibrary == nil ? 300 : 220) : 150, height: 150)
                                 .overlay { if photo.video { VideoBadge() } }
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel((photo.video ? "Video" : "Foto") + (photo.caption.map { ": \($0)" } ?? ""))
+                    }
+                    if let showLibrary, let showCamera {
+                        AddPhotoButton(showLibrary: showLibrary, showCamera: showCamera) {
+                            addTile
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isAdding)
+                        .accessibilityLabel("Fotos hinzufügen")
                     }
                 }
             }
@@ -87,6 +99,24 @@ struct RunPhotoGallery: View {
         .fullScreenCover(item: $selection) { photo in
             PhotoViewer(run: run, photos: photos, selection: photo)
         }
+    }
+
+    private var addTile: some View {
+        RoundedRectangle(cornerRadius: 10)
+            .strokeBorder(Color.secondary.opacity(0.4), style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+            .frame(width: 100, height: 150)
+            .overlay {
+                if isAdding {
+                    ProgressView()
+                } else {
+                    VStack(spacing: 6) {
+                        Image(systemName: "photo.badge.plus").font(.title2)
+                        Text("Hinzufügen").font(.caption)
+                    }
+                    .foregroundStyle(Color.accentColor)
+                }
+            }
+            .contentShape(Rectangle())
     }
 }
 
@@ -96,6 +126,10 @@ struct PhotoViewer: View {
     let photos: [RunPhoto]
     @State var selection: RunPhoto
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
+    @State private var editingCaption = false
+    @State private var caption = ""
+    @State private var confirmDelete = false
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -133,6 +167,8 @@ struct PhotoViewer: View {
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: photos.count > 1 ? .automatic : .never))
+            // Beim Bearbeiten der Beschreibung nicht vor der Tastatur ausweichen
+            .ignoresSafeArea(.keyboard)
 
             Button {
                 dismiss()
@@ -146,6 +182,62 @@ struct PhotoViewer: View {
             .padding()
             .accessibilityLabel("Schließen")
         }
+        .overlay(alignment: .topLeading) {
+            // Eigene Fotos lassen sich beschriften und löschen (Strava-Fotos kämen beim Abgleich zurück)
+            if selection.isOwn {
+                Menu {
+                    Button("Beschreibung bearbeiten", systemImage: "text.bubble") {
+                        caption = currentCaption
+                        editingCaption = true
+                    }
+                    Button(selection.video ? "Video löschen" : "Foto löschen", systemImage: "trash", role: .destructive) {
+                        confirmDelete = true
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(width: 40, height: 40)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+                .padding()
+                .accessibilityLabel("Optionen")
+            }
+        }
+        .alert("Beschreibung", isPresented: $editingCaption) {
+            TextField("z. B. Sonnenaufgang am See", text: $caption)
+            Button("Sichern") { saveCaption() }
+            Button("Abbrechen", role: .cancel) {}
+        }
+        .alert(selection.video ? "Video löschen?" : "Foto löschen?", isPresented: $confirmDelete) {
+            Button("Löschen", role: .destructive) { deleteSelection() }
+            Button("Abbrechen", role: .cancel) {}
+        } message: {
+            Text("Es wird aus diesem Lauf entfernt.")
+        }
+    }
+
+    /// Aktuelle Beschreibung aus dem Lauf (die übergebene Liste kann veraltet sein)
+    private var currentCaption: String {
+        run.photos.first { $0.id == selection.id }?.caption ?? ""
+    }
+
+    private func saveCaption() {
+        var stored = run.photos
+        guard let index = stored.firstIndex(where: { $0.id == selection.id }) else { return }
+        let trimmed = caption.trimmingCharacters(in: .whitespacesAndNewlines)
+        stored[index].caption = trimmed.isEmpty ? nil : trimmed
+        run.photos = stored
+        // Auswahl mitziehen: Die Seiten sind mit dem ganzen Eintrag (samt Beschreibung) markiert
+        selection = stored[index]
+        try? context.save()
+    }
+
+    private func deleteSelection() {
+        let photo = selection
+        dismiss()
+        PhotoAttachment.remove(photo, from: run)
+        try? context.save()
     }
 
     /// Strava gibt die Videodatei nicht heraus: Standbild mit Knopf zum Abspielen in Strava.

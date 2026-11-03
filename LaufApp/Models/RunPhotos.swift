@@ -2,8 +2,11 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-/// Foto oder Video zu einem Lauf (z. B. von Strava). Dateien liegen im App-Ordner, nicht in der Datenbank.
+/// Foto oder Video zu einem Lauf (von Strava oder selbst angehängt). Dateien liegen im App-Ordner, nicht in der Datenbank.
 struct RunPhoto: Codable, Hashable, Identifiable {
+    /// Präfix der ID selbst angehängter Fotos
+    static let ownPrefix = "own-"
+
     /// Strava-ID des Fotos (bzw. eine eigene ID)
     var id: String
     /// Bild; bei Videos das Standbild
@@ -17,6 +20,9 @@ struct RunPhoto: Codable, Hashable, Identifiable {
     var videoRemoteURL: String?
 
     var video: Bool { isVideo ?? false }
+
+    /// Selbst angehängt (nicht von Strava): lässt sich bearbeiten und löschen
+    var isOwn: Bool { id.hasPrefix(Self.ownPrefix) }
 }
 
 /// Speichert Lauf-Fotos als Dateien unter "Application Support/RunPhotos/<Lauf-ID>/".
