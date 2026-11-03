@@ -32,13 +32,13 @@ extension StrengthExercise {
 private let forward = 0.0, downward = 90.0, upward = -90.0, backward = 180.0
 
 /// Fußgelenk über einem flach aufgesetzten Fuß, dessen Ferse bei `x` steht
-private func flat(_ x: Double) -> CGPoint { CGPoint(x: x + 4, y: Body.floor - Body.ankleHeight) }
+private func flat(_ x: Double) -> CGPoint { CGPoint(x: x + Body.heel, y: Body.floor - Body.ankleHeight) }
 
 /// Fußgelenk, wenn der Fußballen bei `toe` steht und der Fuß die Richtung `foot` hat
 private func ankle(toe: CGPoint, foot: Double) -> CGPoint {
     let f = CGVector(dx: sin(foot * .pi / 180), dy: cos(foot * .pi / 180))
     let sole = CGVector(dx: -f.dy, dy: f.dx)
-    return toe - f * 15 - sole * Body.ankleHeight
+    return toe - f * Body.toe - sole * Body.ankleHeight
 }
 
 /// Hüfte zu einem Fußgelenk bei gegebenen Winkeln von Unterschenkel und Oberschenkel
@@ -75,9 +75,9 @@ extension StrengthExercise {
         animation: ExerciseAnimation(
             frames: [
                 Pose(hip: CGPoint(x: 144, y: 97), torso: 3, nearLeg: .reach(flat(146), bend: forward), farLeg: .reach(flat(149), bend: forward),
-                     nearArm: .angles(12, 168), farArm: .angles(8, 165)),
+                     nearArm: .angles(18, 142), farArm: .angles(14, 140)),
                 Pose(hip: CGPoint(x: 120, y: 147), torso: 38, nearLeg: .reach(flat(146), bend: forward), farLeg: .reach(flat(149), bend: forward),
-                     nearArm: .angles(20, 172), farArm: .angles(16, 170)),
+                     nearArm: .angles(58, 150), farArm: .angles(54, 148)),
             ],
             holds: [0.5, 0.3], moves: [1.4, 1.1], props: [.kettlebell]))
 
@@ -188,7 +188,7 @@ extension StrengthExercise {
                 Pose(hip: CGPoint(x: 174, y: 57), torso: 4, nearLeg: .reach(CGPoint(x: 178, y: 135), bend: forward), farLeg: .angles(72, 2),
                      nearArm: hanging, farArm: hanging, farFoot: 105),
             ],
-            holds: [0.4, 0.4], moves: [1.1, 1.2], props: [.box(x: 152, width: 80, height: 45), .dumbbells], zoom: 0.8))
+            holds: [0.4, 0.4], moves: [1.1, 1.2], props: [.box(x: 152, width: 80, height: 45), .dumbbells]))
 
     static let singleLegSquat = StrengthExercise(
         id: "singleLegSquat", name: "Einbeinige Kniebeuge zur Box",
@@ -396,14 +396,14 @@ extension StrengthExercise {
         measure: .seconds, perSide: true, usesWeight: false,
         animation: ExerciseAnimation(
             frames: [
-                Pose(hip: CGPoint(x: 124, y: 158), torso: -80.5, nearLeg: .reach(CGPoint(x: 205, y: 140), bend: upward),
-                     farLeg: .reach(CGPoint(x: 192, y: 180), bend: downward),
-                     nearArm: .reach(CGPoint(x: 96, y: 181), bend: 165), farArm: .angles(95, 80), nearFoot: 180, farFoot: 180),
-                Pose(hip: CGPoint(x: 122, y: 145.5), torso: -94.4, nearLeg: .reach(CGPoint(x: 205, y: 140), bend: upward),
-                     farLeg: .reach(CGPoint(x: 200, y: 157), bend: downward),
-                     nearArm: .reach(CGPoint(x: 96, y: 181), bend: 165), farArm: .angles(95, 80), nearFoot: 180, farFoot: 180),
+                Pose(hip: CGPoint(x: 118, y: 116), torso: -90, head: 0, nearLeg: .reach(CGPoint(x: 194.8, y: 139), bend: upward),
+                     farLeg: .reach(CGPoint(x: 182.3, y: 181), bend: upward),
+                     nearArm: .angles(80, 86), farArm: .angles(0, 0)),
+                Pose(hip: CGPoint(x: 118, y: 116), torso: -90, head: 0, nearLeg: .reach(CGPoint(x: 194.8, y: 139), bend: upward),
+                     farLeg: .reach(CGPoint(x: 198, y: 152), bend: upward),
+                     nearArm: .angles(80, 86), farArm: .angles(0, 0)),
             ],
-            holds: [0.4, 1.6], moves: [1.0, 1.0], props: [.mat(x: 40, width: 140), .bench(x: 178, width: 70, height: 42)]))
+            holds: [0.5, 1.2], moves: [1.1, 1.1], props: [.mat(x: 30, width: 150), .bench(x: 185, width: 75, height: 42)], frontal: true))
 
     static let sideLyingAbduction = StrengthExercise(
         id: "sideLyingAbduction", name: "Seitliches Beinheben",
@@ -420,12 +420,12 @@ extension StrengthExercise {
         perSide: true, usesWeight: false,
         animation: ExerciseAnimation(
             frames: [
-                Pose(hip: CGPoint(x: 150, y: 173), torso: -90, nearLeg: .angles(91, 91), farLeg: .angles(90, 90),
-                     nearArm: .reach(CGPoint(x: 124, y: 182), bend: upward), farArm: .angles(-95, -95), nearFoot: 180, farFoot: 180),
-                Pose(hip: CGPoint(x: 150, y: 173), torso: -90, nearLeg: .angles(124, 124), farLeg: .angles(90, 90),
-                     nearArm: .reach(CGPoint(x: 124, y: 182), bend: upward), farArm: .angles(-95, -95), nearFoot: 214, farFoot: 180),
+                Pose(hip: CGPoint(x: 150, y: 165), torso: -83, nearLeg: .angles(78, 78), farLeg: .angles(90, 90),
+                     nearArm: .angles(76, 82), farArm: .angles(-88, -88)),
+                Pose(hip: CGPoint(x: 150, y: 165), torso: -83, nearLeg: .angles(112, 112), farLeg: .angles(90, 90),
+                     nearArm: .angles(76, 82), farArm: .angles(-88, -88)),
             ],
-            holds: [0.3, 0.5], moves: [1.0, 1.4], props: [.mat(x: 50, width: 200)]))
+            holds: [0.3, 0.5], moves: [1.0, 1.4], props: [.mat(x: 50, width: 200)], frontal: true))
 
     private static let plankFeet = (near: CGPoint(x: 62, y: 170), far: CGPoint(x: 64, y: 170))
 
@@ -444,10 +444,12 @@ extension StrengthExercise {
         measure: .seconds, usesWeight: false,
         animation: ExerciseAnimation(
             frames: [
-                Pose(hip: CGPoint(x: 143.6, y: 159.7), torso: 81.4, head: 8, nearLeg: .reach(plankFeet.near, bend: downward), farLeg: .reach(plankFeet.far, bend: downward),
-                     nearArm: .reach(CGPoint(x: 220, y: 181), bend: 120), farArm: .reach(CGPoint(x: 223, y: 181), bend: 120), nearFoot: 20, farFoot: 20),
-                Pose(hip: CGPoint(x: 143.6, y: 158.2), torso: 81.0, head: 8, nearLeg: .reach(plankFeet.near, bend: downward), farLeg: .reach(plankFeet.far, bend: downward),
-                     nearArm: .reach(CGPoint(x: 220, y: 181), bend: 120), farArm: .reach(CGPoint(x: 223, y: 181), bend: 120), nearFoot: 20, farFoot: 20),
+                Pose(hip: CGPoint(x: 154.3, y: 163.0), torso: 85.2, head: 10, nearLeg: .reach(CGPoint(x: 70.3, y: 170), bend: downward),
+                     farLeg: .reach(CGPoint(x: 72.3, y: 170), bend: downward),
+                     nearArm: .angles(0, 90), farArm: .angles(0, 90), nearFoot: 20, farFoot: 20),
+                Pose(hip: CGPoint(x: 154.3, y: 161.6), torso: 85.0, head: 10, nearLeg: .reach(CGPoint(x: 70.3, y: 170), bend: downward),
+                     farLeg: .reach(CGPoint(x: 72.3, y: 170), bend: downward),
+                     nearArm: .angles(-1, 90), farArm: .angles(-1, 90), nearFoot: 20, farFoot: 20),
             ],
             holds: [1.2, 1.2], moves: [1.0, 1.0], props: [.mat(x: 40, width: 220)]))
 
@@ -466,12 +468,14 @@ extension StrengthExercise {
         measure: .seconds, perSide: true, usesWeight: false,
         animation: ExerciseAnimation(
             frames: [
-                Pose(hip: CGPoint(x: 146, y: 168), torso: 72, head: 4, nearLeg: .reach(plankFeet.near, bend: downward), farLeg: .reach(plankFeet.far, bend: downward),
-                     nearArm: .reach(CGPoint(x: 220, y: 181), bend: 120), farArm: .angles(175, 178), nearFoot: 60, farFoot: 60),
-                Pose(hip: CGPoint(x: 143.6, y: 159.7), torso: 81.4, head: 4, nearLeg: .reach(plankFeet.near, bend: downward), farLeg: .reach(plankFeet.far, bend: downward),
-                     nearArm: .reach(CGPoint(x: 220, y: 181), bend: 120), farArm: .angles(178, 180), nearFoot: 60, farFoot: 60),
+                Pose(hip: CGPoint(x: 150, y: 132.9), torso: 70, head: 4, nearLeg: .reach(CGPoint(x: 77, y: 181), bend: upward),
+                     farLeg: .reach(CGPoint(x: 79, y: 172), bend: upward),
+                     nearArm: .angles(0, 0), farArm: .angles(180, 180)),
+                Pose(hip: CGPoint(x: 150, y: 136), torso: 71.5, head: 4, nearLeg: .reach(CGPoint(x: 77, y: 181), bend: upward),
+                     farLeg: .reach(CGPoint(x: 79, y: 172), bend: upward),
+                     nearArm: .angles(0, 0), farArm: .angles(178, 178)),
             ],
-            holds: [0.3, 1.4], moves: [1.0, 1.0], props: [.mat(x: 40, width: 220)]))
+            holds: [1.4, 0.4], moves: [1.0, 1.0], props: [.mat(x: 40, width: 220)], frontal: true))
 
     static let deadBug = StrengthExercise(
         id: "deadBug", name: "Dead Bug",
@@ -550,7 +554,7 @@ extension StrengthExercise {
                      farLeg: .reach(shifted(ankle(toe: shifted(pogoToe, 3, 0), foot: 50), 0, -14), bend: forward),
                      nearArm: .angles(10, 52), farArm: .angles(6, 48), nearFoot: 50, farFoot: 50),
             ],
-            holds: [0.03, 0.03], moves: [0.2, 0.2], zoom: 0.88))
+            holds: [0.03, 0.03], moves: [0.2, 0.2]))
 
     static let boxJump = StrengthExercise(
         id: "boxJump", name: "Box Jump",
@@ -578,7 +582,7 @@ extension StrengthExercise {
                 Pose(hip: CGPoint(x: 208, y: 48), torso: 3, nearLeg: .reach(CGPoint(x: 214, y: 130), bend: forward), farLeg: .reach(CGPoint(x: 217, y: 130), bend: forward),
                      nearArm: .angles(5, 10), farArm: .angles(3, 8)),
             ],
-            holds: [0.4, 0.08, 0, 0.12, 0.6], moves: [0.5, 0.22, 0.22, 0.5, 0.8], props: [.box(x: 188, width: 65, height: 50)], zoom: 0.78))
+            holds: [0.4, 0.08, 0, 0.12, 0.6], moves: [0.5, 0.22, 0.22, 0.5, 0.8], props: [.box(x: 188, width: 65, height: 50)]))
 
     static let jumpLunge = StrengthExercise(
         id: "jumpLunge", name: "Sprung-Ausfallschritt",

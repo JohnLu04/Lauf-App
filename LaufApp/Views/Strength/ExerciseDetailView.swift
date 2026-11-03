@@ -13,7 +13,7 @@ struct ExerciseDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(spacing: 0) {
-                    ExerciseThumbnail(exercise: exercise, cornerRadius: 0)
+                    ExerciseThumbnail(exercise: exercise, animating: true, cornerRadius: 0)
                         .frame(maxWidth: .infinity)
                         .frame(height: 240)
                     VStack(spacing: 0) {

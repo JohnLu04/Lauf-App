@@ -213,7 +213,7 @@ struct ExerciseProgressView: View {
         let current = metric ?? metrics[0]
         List {
             Section {
-                ExerciseThumbnail(exercise: exercise)
+                ExerciseThumbnail(exercise: exercise, animating: true)
                     .frame(height: 150)
                     .listRowInsets(EdgeInsets())
             }

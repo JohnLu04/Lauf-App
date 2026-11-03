@@ -178,18 +178,24 @@ struct SessionRow: View {
     }
 }
 
-/// Animierte Übungsfigur auf hellem Hintergrund (wie eine Illustration, auch im Dunkelmodus).
+/// Übungsfigur auf hellem Hintergrund (wie eine Illustration, auch im Dunkelmodus):
+/// animiert in 3D oder als Standbild für Listen.
 struct ExerciseThumbnail: View {
     let exercise: StrengthExercise
-    var animating = true
+    var animating = false
     var cornerRadius: CGFloat = 10
 
     var body: some View {
-        ExerciseFigureView(animation: exercise.animation, primary: Set(exercise.primary),
-                           secondary: Set(exercise.secondary), isAnimating: animating)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(white: 0.97))
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+        Group {
+            if animating {
+                Exercise3DView(exercise: exercise)
+            } else {
+                ExerciseSnapshotView(exercise: exercise)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(white: 0.965))
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
     }
 }
 

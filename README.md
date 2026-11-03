@@ -41,7 +41,7 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 
 **Krafttraining für Läufer** (Trainingstab → „Krafttraining“)
 - Sechs Programme auf Basis von Studien mit Läufern und Sportlern: Kraft-Basis, Maximalkraft & Laufökonomie, Plyometrie, Verletzungsprävention, Rumpf & Stabilität, Hüfte & Knie – jeweils mit Vorgaben zu Sätzen, Wiederholungen, Intensität und Pausen sowie der Studienlage
-- 23 Übungen mit animierter Figur, auf der die beanspruchten Muskeln rot hervorgehoben sind (Haupt- und unterstützende Muskeln), dazu Ausführung, häufige Fehler und der Nutzen fürs Laufen
+- 23 Übungen mit animierter 3D-Figur (Mensch mit Gesicht, Geräte wie Hanteln, Bank und Box), auf der die beanspruchten Muskeln rot hervorgehoben sind (Haupt- und unterstützende Muskeln), dazu Ausführung, häufige Fehler und der Nutzen fürs Laufen
 - Tagebuch: Sätze mit Wiederholungen, Gewicht bzw. Haltezeit und Wiederholungen in Reserve eintragen, vorbelegt mit den Werten der letzten Einheit; Übungen frei hinzufügen oder entfernen
 - Fortschritt je Übung als Diagramm (geschätztes 1RM, Gewicht, Volumen bzw. Wiederholungen oder Zeit)
 
@@ -95,3 +95,7 @@ LaufApp/
 - Auto-Pause
 - Routenplanung und Segmente
 - GPX-Import und -Export
+
+## Lizenzen
+
+- 3D-Figur: „Universal Base Characters“ von Quaternius (quaternius.com), CC0 1.0 (gemeinfrei)
