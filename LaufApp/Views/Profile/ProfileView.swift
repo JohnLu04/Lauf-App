@@ -65,10 +65,19 @@ struct ProfileView: View {
                             Label("Strava & Garmin", systemImage: "applewatch")
                         }
                     }
+                    NavigationLink {
+                        HealthSettingsView()
+                    } label: {
+                        LabeledContent {
+                            Text(HealthSync.shared.isEnabled ? "Aktiv" : "Aus")
+                        } label: {
+                            Label("Apple Health", systemImage: "heart.fill")
+                        }
+                    }
                 } header: {
                     Text("Verbindungen")
                 } footer: {
-                    Text("Läufe deiner Garmin-Uhr automatisch übernehmen, mit Herzfrequenz und Schrittfrequenz.")
+                    Text("Läufe deiner Garmin-Uhr oder Apple Watch automatisch übernehmen, mit Herzfrequenz und Schrittfrequenz.")
                 }
 
                 Section {

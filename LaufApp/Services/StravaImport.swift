@@ -239,9 +239,10 @@ enum StravaImport {
         return run
     }
 
-    /// Wurde derselbe Lauf schon mit der App aufgezeichnet? (Start ±10 min, Distanz ±15 %)
-    static func isDuplicate(_ activity: Activity, of runs: [Run]) -> Bool {
-        runs.contains { run in
+    /// Derselbe Lauf, schon mit LaufApp aufgezeichnet oder aus Apple Health importiert?
+    /// (Start ±10 min, Distanz ±15 %)
+    static func duplicate(of activity: Activity, in runs: [Run]) -> Run? {
+        runs.first { run in
             !run.isFromStrava
                 && abs(run.startDate.timeIntervalSince(activity.startDate)) < 600
                 && abs(run.distance - activity.distance) < max(300, activity.distance * 0.15)

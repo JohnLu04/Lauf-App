@@ -2,9 +2,91 @@
 import Foundation
 import UIKit
 import AVFoundation
+import HealthKit
+import CoreLocation
 
 /// Erzeugt realistische Test-Läufe für den Simulator (nur Debug-Builds).
 enum DemoData {
+    /// Speichert einen Test-Lauf (Route, Herzfrequenz, Schritte, Distanz, eine Pause) in Apple Health.
+    static func writeHealthWorkout(to store: HKHealthStore) async throws {
+        let shareTypes: Set<HKSampleType> = [HKObjectType.workoutType(), HKSeriesType.workoutRoute(),
+                                             HealthSync.heartRate, HealthSync.steps, HealthSync.distance]
+        try await store.requestAuthorization(toShare: shareTypes, read: HealthSync.readTypes)
+
+        // Vorlage: zufälliger Demo-Lauf (Route und Messwerte), heute vor zwei Stunden
+        let template = makeRun()
+        RunPhotoStore.deleteAll(for: template.id)
+        let shift = Date.now.addingTimeInterval(-7200).timeIntervalSince(template.startDate)
+        let points = template.route.map { p -> RoutePoint in
+            var p = p
+            p.timestamp = p.timestamp.addingTimeInterval(shift)
+            return p
+        }
+        guard let first = points.first, let last = points.last else { return }
+        // Zwei Minuten Pause nach der Hälfte (Ampel)
+        let pauseIndex = points.count / 2
+        let pause: TimeInterval = 120
+        let timed = points.enumerated().map { i, p -> RoutePoint in
+            var p = p
+            if i > pauseIndex { p.timestamp = p.timestamp.addingTimeInterval(pause) }
+            return p
+        }
+        let start = first.timestamp, end = last.timestamp.addingTimeInterval(pause)
+        let pauseStart = timed[pauseIndex].timestamp
+
+        let configuration = HKWorkoutConfiguration()
+        configuration.activityType = .running
+        configuration.locationType = .outdoor
+        let builder = HKWorkoutBuilder(healthStore: store, configuration: configuration, device: .local())
+        try await builder.beginCollection(at: start)
+
+        let bpm = HKUnit.count().unitDivided(by: .minute())
+        var samples: [HKSample] = []
+        let sensors = template.sensorSamples
+        // Messwerte alle 10 s
+        var t = start
+        var previous = start
+        var index = 0
+        while t < end {
+            let next = min(end, t.addingTimeInterval(10))
+            if !(t >= pauseStart && t < pauseStart.addingTimeInterval(pause)) {
+                while index < timed.count - 1 && timed[index].timestamp < next { index += 1 }
+                let sensor = sensors.isEmpty ? nil : sensors[min(sensors.count - 1, index * sensors.count / max(1, timed.count))]
+                if let hr = sensor?.heartRate {
+                    samples.append(HKQuantitySample(type: HealthSync.heartRate, quantity: HKQuantity(unit: bpm, doubleValue: hr), start: t, end: t))
+                }
+                let cadence = sensor?.cadence ?? 168
+                samples.append(HKQuantitySample(type: HealthSync.steps, quantity: HKQuantity(unit: .count(), doubleValue: cadence * next.timeIntervalSince(t) / 60),
+                                                start: t, end: next))
+                let segment = timed.filter { $0.timestamp > previous && $0.timestamp <= next }
+                var meters = 0.0
+                for (a, b) in zip(segment, segment.dropFirst()) { meters += Geo.distance(a, b) }
+                if meters > 0 {
+                    samples.append(HKQuantitySample(type: HealthSync.distance, quantity: HKQuantity(unit: .meter(), doubleValue: meters),
+                                                    start: t, end: next))
+                }
+            }
+            previous = next
+            t = next
+        }
+        try await builder.addSamples(samples)
+        try await builder.addWorkoutEvents([
+            HKWorkoutEvent(type: .pause, dateInterval: DateInterval(start: pauseStart, duration: 0), metadata: nil),
+            HKWorkoutEvent(type: .resume, dateInterval: DateInterval(start: pauseStart.addingTimeInterval(pause), duration: 0), metadata: nil),
+        ])
+        try await builder.addMetadata([HKMetadataKeyElevationAscended: HKQuantity(unit: .meter(), doubleValue: template.elevationGain)])
+        try await builder.endCollection(at: end)
+        guard let workout = try await builder.finishWorkout() else { return }
+
+        let routeBuilder = HKWorkoutRouteBuilder(healthStore: store, device: .local())
+        let locations = timed.map {
+            CLLocation(coordinate: $0.coordinate, altitude: $0.altitude ?? 0, horizontalAccuracy: 5, verticalAccuracy: 3,
+                       course: -1, speed: -1, timestamp: $0.timestamp)
+        }
+        try await routeBuilder.insertRouteData(locations)
+        try await routeBuilder.finishRoute(with: workout, metadata: nil)
+    }
+
     /// Sechs Einheiten „Maximalkraft“ der letzten drei Wochen mit steigenden Gewichten
     static func makeStrengthSessions() -> [StrengthSession] {
         (0..<6).map { i in

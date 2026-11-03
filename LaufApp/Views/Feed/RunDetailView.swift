@@ -34,11 +34,13 @@ struct RunDetailView: View {
                     Text(run.startDate.formatted(date: .complete, time: .shortened))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    if run.isFromStrava {
-                        Label("Von Strava importiert", systemImage: "applewatch")
+                    HStack(spacing: 6) {
+                        RunSourceBadges(run: run)
+                        Text(sourceDescription)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    .padding(.top, 2)
                     if !run.notes.isEmpty {
                         Text(run.notes).padding(.top, 4)
                     }
@@ -197,6 +199,16 @@ struct RunDetailView: View {
         withAnimation { photoMessage = message }
         try? await Task.sleep(for: .seconds(2.5))
         withAnimation { photoMessage = nil }
+    }
+
+    private var sourceDescription: String {
+        let health = run.healthSourceName.isEmpty ? "Apple Health" : "Apple Health (\(run.healthSourceName))"
+        switch (run.isFromStrava || run.stravaID != nil, run.isFromHealth || run.healthID != nil) {
+        case (true, true): return "Importiert aus Strava und \(health)"
+        case (true, false): return "Importiert aus Strava"
+        case (false, true): return "Importiert aus \(health)"
+        default: return "Mit LaufApp aufgezeichnet"
+        }
     }
 
     private var statsGrid: some View {

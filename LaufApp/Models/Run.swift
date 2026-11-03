@@ -59,9 +59,13 @@ final class Run {
     /// 0 = keine Angabe, sonst 1–10
     var perceivedEffort: Int = 0
     var plannedWorkoutID: UUID?
-    /// Herkunft: "" = mit der App aufgezeichnet, "strava" = von Strava importiert
+    /// Herkunft: "" = mit der App aufgezeichnet, "strava" = von Strava, "health" = aus Apple Health
     var source: String = ""
     var stravaID: Int?
+    /// UUID des Trainings in Apple Health
+    var healthID: String?
+    /// App bzw. Gerät, das das Training in Apple Health gespeichert hat (z. B. „Trainings“, „Garmin Connect“)
+    var healthSourceName: String = ""
     /// Schläge pro Minute, 0 = keine Daten
     var averageHeartRate: Double = 0
     var maxHeartRate: Double = 0
@@ -142,9 +146,34 @@ final class Run {
 
     var isFromStrava: Bool { source == "strava" }
 
+    var isFromHealth: Bool { source == "health" }
+
+    /// Woher der Lauf stammt (ein Lauf kann gleichzeitig in Strava und Apple Health liegen)
+    var sources: [RunSource] {
+        var result: [RunSource] = []
+        if isFromStrava || stravaID != nil { result.append(.strava) }
+        if isFromHealth || healthID != nil { result.append(.health) }
+        if source.isEmpty { result.insert(.app, at: 0) }
+        return result
+    }
+
     /// Schnellste Zeit (Sekunden) je Distanz (Meter, gerundet) innerhalb dieses Laufs.
     var bestEfforts: [Int: Double] {
         get { (try? JSONDecoder().decode([Int: Double].self, from: bestEffortsData)) ?? [:] }
         set { bestEffortsData = (try? JSONEncoder().encode(newValue)) ?? Data() }
+    }
+}
+
+/// Herkunft eines Laufs.
+enum RunSource: String, Identifiable {
+    case app, strava, health
+    var id: String { rawValue }
+
+    var name: String {
+        switch self {
+        case .app: "LaufApp"
+        case .strava: "Strava"
+        case .health: "Apple Health"
+        }
     }
 }

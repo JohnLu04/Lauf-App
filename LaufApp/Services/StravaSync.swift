@@ -420,7 +420,18 @@ final class StravaSync {
             let knownIDs = Set(existing.compactMap(\.stravaID))
             for activity in activities.filter(\.isRun).sorted(by: { $0.startDate < $1.startDate }) {
                 defer { syncedUntil = max(syncedUntil ?? .distantPast, activity.startDate) }
-                if knownIDs.contains(activity.id) || StravaImport.isDuplicate(activity, of: existing) { continue }
+                if knownIDs.contains(activity.id) { continue }
+                if let duplicate = StravaImport.duplicate(of: activity, in: existing) {
+                    // Schon aus Apple Health importiert: mit Strava verknüpfen (Fotos, Kudos, Kommentare)
+                    if duplicate.isFromHealth, duplicate.stravaID == nil {
+                        duplicate.stravaID = activity.id
+                        if (activity.totalPhotoCount ?? 0) > 0 { try? await importPhotos(for: duplicate, activityID: activity.id) }
+                        try? await updateSocial(for: duplicate, kudosCount: activity.kudosCount ?? 0,
+                                                commentCount: activity.commentCount ?? 0)
+                        try? context.save()
+                    }
+                    continue
+                }
                 let streams: StravaImport.Streams? = try await get("/activities/\(activity.id)/streams", query: [
                     URLQueryItem(name: "keys", value: StravaImport.streamKeys),
                     URLQueryItem(name: "key_by_type", value: "true"),

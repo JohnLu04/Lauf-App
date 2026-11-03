@@ -77,6 +77,13 @@ struct WeekSummaryCard: View {
 struct RunCardView: View {
     let run: Run
 
+    private var date: some View {
+        Text(run.startDate.formatted(date: .abbreviated, time: .shortened))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
@@ -85,11 +92,19 @@ struct RunCardView: View {
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
                     .background(Color.accentColor, in: Circle())
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(run.title).font(.headline)
-                    Text(run.startDate.formatted(date: .abbreviated, time: .shortened))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    // Herkunft neben dem Datum, bei wenig Platz darunter
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 6) {
+                            date
+                            RunSourceBadges(run: run)
+                        }
+                        VStack(alignment: .leading, spacing: 3) {
+                            date
+                            RunSourceBadges(run: run)
+                        }
+                    }
                 }
                 Spacer()
                 Image(systemName: "chevron.right").foregroundStyle(.tertiary)

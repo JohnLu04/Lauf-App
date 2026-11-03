@@ -17,10 +17,17 @@ struct RootView: View {
             ProfileView()
                 .tabItem { Label("Du", systemImage: "person.fill") }
         }
-        // Neue Läufe von Strava (z. B. von der Garmin-Uhr) beim Öffnen der App holen
-        .task { await StravaSync.shared.syncIfNeeded(context: modelContext) }
+        // Neue Läufe aus Apple Health und von Strava (z. B. von der Garmin-Uhr) beim Öffnen der App holen
+        .task {
+            await HealthSync.shared.syncIfNeeded(context: modelContext)
+            await StravaSync.shared.syncIfNeeded(context: modelContext)
+        }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await StravaSync.shared.syncIfNeeded(context: modelContext) } }
+            guard phase == .active else { return }
+            Task {
+                await HealthSync.shared.syncIfNeeded(context: modelContext)
+                await StravaSync.shared.syncIfNeeded(context: modelContext)
+            }
         }
         // Während einer Aufzeichnung liegt der Aufnahmebildschirm über allem.
         .fullScreenCover(isPresented: Binding(get: { recorder.isSessionActive }, set: { _ in })) {

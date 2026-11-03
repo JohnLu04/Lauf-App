@@ -8,6 +8,10 @@
 	<string>LaufApp zeichnet deinen Lauf auch weiter auf, wenn der Bildschirm gesperrt ist.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>LaufApp trägt deinen Trainingsplan in einen eigenen Kalender „LaufApp Training“ ein und hält ihn aktuell, wenn du Einheiten verschiebst oder den Plan anpasst.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>LaufApp übernimmt deine Lauftrainings aus Apple Health – mit Strecke, Herzfrequenz und Schritten –, damit du sie in deiner Übersicht siehst.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>LaufApp schreibt keine Daten in Apple Health; der Zugriff wird nur in Testversionen für Beispieltrainings verwendet.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

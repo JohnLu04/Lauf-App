@@ -45,6 +45,14 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 - Tagebuch: Sätze mit Wiederholungen, Gewicht bzw. Haltezeit und Wiederholungen in Reserve eintragen, vorbelegt mit den Werten der letzten Einheit; Übungen frei hinzufügen oder entfernen
 - Fortschritt je Übung als Diagramm (geschätztes 1RM, Gewicht, Volumen bzw. Wiederholungen oder Zeit)
 
+**Apple Health**
+- Lauftrainings aus Apple Health werden automatisch übernommen (Apple Watch, Garmin Connect, Nike Run Club …): Strecke, Herzfrequenz, Schrittfrequenz, Splits, Höhenmeter und Pausen
+- Läufe, die schon von Strava importiert oder mit LaufApp aufgezeichnet wurden, werden nicht doppelt angelegt; liegt ein Lauf in beiden Quellen, wird er verknüpft
+- Einrichtung im Profil unter „Apple Health“
+
+**Herkunft im Feed**
+- Jede Aktivität zeigt, woher sie stammt: LaufApp, Strava oder Apple Health
+
 **Garmin & Strava**
 - Läufe deiner Garmin-Uhr automatisch übernehmen: Garmin Connect → Strava → LaufApp
 - Herzfrequenz-Verlauf mit Zeit in den 5 Herzfrequenzzonen, Schrittfrequenz-Verlauf, Route, Splits und Höhe
