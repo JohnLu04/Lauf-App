@@ -119,6 +119,61 @@ extension PlannedRoute {
 
 /// Geometrie auf einer Route: Länge, Abstand zur Route und Fortschritt.
 enum RouteGeometry {
+    /// Abzweigungen entlang der Route. Die Laufrichtung wird jeweils über 20 m vor und nach einem Punkt
+    /// bestimmt; ändert sie sich um mindestens 35°, ist dort eine Abzweigung (die stärkste Stelle zählt).
+    static func turns(_ path: [RouteCoordinate]) -> [RouteTurn] {
+        let samples = ElevationService.resample(path, every: 5)
+        let k = 4   // 4 × 5 m = 20 m
+        guard samples.count > 2 * k + 1 else { return [] }
+        func bearing(_ a: RouteCoordinate, _ b: RouteCoordinate) -> Double {
+            let dx = (b.longitude - a.longitude) * cos(a.latitude * .pi / 180)
+            let dy = b.latitude - a.latitude
+            return atan2(dx, dy) * 180 / .pi   // 0 = Norden, 90 = Osten
+        }
+        var angles = [Double](repeating: 0, count: samples.count)
+        for i in k..<(samples.count - k) {
+            let incoming = bearing(samples[i - k].point, samples[i].point)
+            let outgoing = bearing(samples[i].point, samples[i + k].point)
+            var d = (outgoing - incoming).truncatingRemainder(dividingBy: 360)
+            if d > 180 { d -= 360 }
+            if d < -180 { d += 360 }
+            angles[i] = d
+        }
+        let total = samples.last?.along ?? 0
+        var result: [RouteTurn] = []
+        var i = k
+        while i < samples.count - k {
+            guard abs(angles[i]) >= 35 else { i += 1; continue }
+            // Zusammenhängenden Bereich gleicher Richtung suchen und die stärkste Stelle nehmen
+            var best = i
+            var j = i
+            while j < samples.count - k, abs(angles[j]) >= 35, (angles[j] > 0) == (angles[i] > 0) {
+                if abs(angles[j]) > abs(angles[best]) { best = j }
+                j += 1
+            }
+            let along = samples[best].along
+            // Gegenprobe über 40 m: Bei kleinen Schlenkern hebt sich die Richtungsänderung auf
+            let wide = 8
+            let lo = max(0, best - wide), hi = min(samples.count - 1, best + wide)
+            var net = (bearing(samples[best].point, samples[hi].point) - bearing(samples[lo].point, samples[best].point))
+                .truncatingRemainder(dividingBy: 360)
+            if net > 180 { net -= 360 }
+            if net < -180 { net += 360 }
+            let consistent = abs(net) >= 30 && (net > 0) == (angles[best] > 0)
+            if consistent, along > 15, total - along > 15, let direction = TurnDirection(angle: angles[best]) {
+                // Dicht aufeinanderfolgende Knicke in dieselbe Richtung zusammenfassen
+                if let last = result.last, along - last.along < 25,
+                   (last.direction.instruction.contains("links")) == (direction.instruction.contains("links")) {
+                    result[result.count - 1] = RouteTurn(along: along, direction: direction)
+                } else {
+                    result.append(RouteTurn(along: along, direction: direction))
+                }
+            }
+            i = j + 1
+        }
+        return result
+    }
+
     /// Weniger Punkte bei gleicher Form (Douglas-Peucker, Toleranz in Metern)
     static func simplified(_ path: [RouteCoordinate], tolerance: Double) -> [RouteCoordinate] {
         guard path.count > 2 else { return path }

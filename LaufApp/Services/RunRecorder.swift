@@ -36,6 +36,8 @@ final class RunRecorder: NSObject {
     private(set) var isOffRoute = false
     /// Entfernung zum Startpunkt der Route, solange man noch nicht auf der Route ist
     private(set) var distanceToRouteStart: Double?
+    /// Abzweigungen der gewählten Route (für Ansagen und Live-Aktivität)
+    private(set) var routeTurns: [RouteTurn] = []
 
     /// true, solange der Aufzeichnungsbildschirm angezeigt werden soll.
     var isSessionActive: Bool { state != .idle || finishedDraft != nil }
@@ -68,6 +70,8 @@ final class RunRecorder: NSObject {
     @ObservationIgnored private var offRouteCount = 0
     @ObservationIgnored private var lastRouteAlert: TimeInterval = -1000
     @ObservationIgnored private var announcedRouteEnd = false
+    /// Position (Meter entlang der Route) der zuletzt angesagten Abzweigung
+    @ObservationIgnored private var announcedTurnAlong: Double = -1
 
     override init() {
         super.init()
@@ -106,6 +110,7 @@ final class RunRecorder: NSObject {
             routePath = route.path
             routeName = route.name
             routeDistance = route.distance
+            routeTurns = RouteGeometry.turns(route.path)
         }
         state = .running
         startDate = Date()
@@ -116,6 +121,7 @@ final class RunRecorder: NSObject {
         speak("Aufzeichnung gestartet.")
         if let first = currentStep { announce(first) }
         startTicker()
+        LiveActivityController.shared.start(self)
     }
 
     func pause() {
@@ -128,6 +134,7 @@ final class RunRecorder: NSObject {
         state = .paused
         ticker?.invalidate()
         speak("Pausiert.")
+        LiveActivityController.shared.update(self)
     }
 
     func resume() {
@@ -136,6 +143,7 @@ final class RunRecorder: NSObject {
         state = .running
         startTicker()
         speak("Weiter geht's.")
+        LiveActivityController.shared.update(self)
     }
 
     /// Beendet die Aufzeichnung. Danach liegt `finishedDraft` zum Speichern bereit.
@@ -149,6 +157,7 @@ final class RunRecorder: NSObject {
                                  movingTime: accumulatedTime, distance: distance,
                                  points: points, plannedWorkoutID: plannedWorkout?.id)
         state = .idle
+        LiveActivityController.shared.end()
     }
 
     /// Nach dem Speichern oder Verwerfen aufrufen.
@@ -192,6 +201,8 @@ final class RunRecorder: NSObject {
         offRouteCount = 0
         lastRouteAlert = -1000
         announcedRouteEnd = false
+        routeTurns = []
+        announcedTurnAlong = -1
         stepStartDistance = 0
         stepStartTime = 0
         lastPaceAlert = 0
@@ -203,6 +214,12 @@ final class RunRecorder: NSObject {
 
     var hasRoute: Bool { !routePath.isEmpty }
     var routeRemaining: Double { max(0, routeDistance - routeProgress) }
+
+    /// Nächste Abzweigung vor der aktuellen Position auf der Route
+    var nextTurn: RouteTurn? {
+        guard hasJoinedRoute, !isOffRoute else { return nil }
+        return routeTurns.first { $0.along > routeProgress + 5 }
+    }
 
     /// Fortschritt auf der Route, Warnung beim Abkommen, Ansage am Ende.
     private func checkRoute(_ location: CLLocation) {
@@ -246,6 +263,16 @@ final class RunRecorder: NSObject {
         } else if isOffRoute, offRouteCount == 0 {
             isOffRoute = false
             speak("Wieder auf der Route.")
+        }
+
+        // Abzweigung etwa 50 m vorher ansagen
+        if !isOffRoute, let turn = nextTurn, turn.along != announcedTurnAlong {
+            let ahead = turn.along - routeProgress
+            if ahead <= 60 {
+                announcedTurnAlong = turn.along
+                speak(ahead > 20 ? "In \(Int((ahead / 10).rounded()) * 10) Metern \(turn.direction.instruction)."
+                                 : "Jetzt \(turn.direction.instruction).")
+            }
         }
 
         if !announcedRouteEnd, routeDistance > 200, routeRemaining < 30 {
@@ -403,6 +430,7 @@ final class RunRecorder: NSObject {
             updateStep()
             checkRoute(loc)
         }
+        if state == .running { LiveActivityController.shared.update(self) }
     }
 
     /// Aktuelle Pace über die letzten ~30 Sekunden.

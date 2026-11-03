@@ -9,14 +9,61 @@
 /* Begin PBXFileReference section */
 		AA0000000000000000000001 /* LaufApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LaufApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000000000000000000010 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		BB0000000000000000000001 /* LaufAppWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LaufAppWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0000000000000000000002 /* Widget-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Widget-Info.plist"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXBuildFile section */
+		BB0000000000000000000003 /* LaufAppWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000001 /* LaufAppWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		BB0000000000000000000004 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AA0000000000000000000009 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BB0000000000000000000010;
+			remoteInfo = LaufAppWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		BB0000000000000000000005 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				BB0000000000000000000003 /* LaufAppWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		BB0000000000000000000006 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BB0000000000000000000010 /* LaufAppWidget */;
+			targetProxy = BB0000000000000000000004 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AA0000000000000000000002 /* LaufApp */ = {isa = PBXFileSystemSynchronizedRootGroup; path = LaufApp; sourceTree = "<group>"; };
+		BB0000000000000000000007 /* Shared */ = {isa = PBXFileSystemSynchronizedRootGroup; path = Shared; sourceTree = "<group>"; };
+		BB0000000000000000000008 /* LaufAppWidget */ = {isa = PBXFileSystemSynchronizedRootGroup; path = LaufAppWidget; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		AA0000000000000000000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB0000000000000000000011 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -30,6 +77,8 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000002 /* LaufApp */,
+				BB0000000000000000000007 /* Shared */,
+				BB0000000000000000000008 /* LaufAppWidget */,
 				AA0000000000000000000011 /* Config */,
 				AA0000000000000000000005 /* Products */,
 			);
@@ -39,6 +88,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000001 /* LaufApp.app */,
+				BB0000000000000000000001 /* LaufAppWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -47,6 +97,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000010 /* Info.plist */,
+				BB0000000000000000000002 /* Widget-Info.plist */,
 			);
 			path = Config;
 			sourceTree = "<group>";
@@ -61,13 +112,16 @@
 				AA0000000000000000000007 /* Sources */,
 				AA0000000000000000000003 /* Frameworks */,
 				AA0000000000000000000008 /* Resources */,
+				BB0000000000000000000005 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				BB0000000000000000000006 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				AA0000000000000000000002 /* LaufApp */,
+				BB0000000000000000000007 /* Shared */,
 			);
 			name = LaufApp;
 			packageProductDependencies = (
@@ -75,6 +129,29 @@
 			productName = LaufApp;
 			productReference = AA0000000000000000000001 /* LaufApp.app */;
 			productType = "com.apple.product-type.application";
+		};
+		BB0000000000000000000010 /* LaufAppWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB0000000000000000000014 /* Build configuration list for PBXNativeTarget "LaufAppWidget" */;
+			buildPhases = (
+				BB0000000000000000000012 /* Sources */,
+				BB0000000000000000000011 /* Frameworks */,
+				BB0000000000000000000013 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				BB0000000000000000000007 /* Shared */,
+				BB0000000000000000000008 /* LaufAppWidget */,
+			);
+			name = LaufAppWidget;
+			packageProductDependencies = (
+			);
+			productName = LaufAppWidget;
+			productReference = BB0000000000000000000001 /* LaufAppWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -87,6 +164,9 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					AA0000000000000000000006 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					BB0000000000000000000010 = {
 						CreatedOnToolsVersion = 16.0;
 					};
 				};
@@ -106,6 +186,7 @@
 			projectRoot = "";
 			targets = (
 				AA0000000000000000000006 /* LaufApp */,
+				BB0000000000000000000010 /* LaufAppWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -118,10 +199,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BB0000000000000000000013 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		AA0000000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB0000000000000000000012 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -242,6 +337,54 @@
 			};
 			name = Release;
 		};
+		BB0000000000000000000015 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 26;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/Widget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = LaufApp;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.25;
+				PRODUCT_BUNDLE_IDENTIFIER = de.josc.LaufApp.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		BB0000000000000000000016 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 26;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/Widget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = LaufApp;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.25;
+				PRODUCT_BUNDLE_IDENTIFIER = de.josc.LaufApp.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -259,6 +402,15 @@
 			buildConfigurations = (
 				AA000000000000000000000C /* Debug */,
 				AA000000000000000000000D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BB0000000000000000000014 /* Build configuration list for PBXNativeTarget "LaufAppWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB0000000000000000000015 /* Debug */,
+				BB0000000000000000000016 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -5,6 +5,7 @@ import Charts
 struct ProfileView: View {
     @Query(sort: \Run.startDate, order: .reverse) private var runs: [Run]
     @AppStorage("voiceFeedback") private var voiceFeedback = true
+    @AppStorage("liveActivity") private var liveActivity = true
     @AppStorage(HeartRateZones.maxHeartRateKey) private var storedMaxHeartRate = 0.0
     @Environment(\.modelContext) private var context
 
@@ -82,6 +83,7 @@ struct ProfileView: View {
 
                 Section {
                     Toggle("Sprachansagen (jeder km)", isOn: $voiceFeedback)
+                    Toggle("Live-Aktivität auf dem Sperrbildschirm", isOn: $liveActivity)
                     Stepper(value: Binding(get: { HeartRateZones.maxHeartRate(runs: runs) },
                                            set: { storedMaxHeartRate = $0 }),
                             in: 140...220) {
@@ -90,7 +92,7 @@ struct ProfileView: View {
                 } header: {
                     Text("Einstellungen")
                 } footer: {
-                    Text("Sprachansagen: Zeit und Kilometer-Split nach jedem Kilometer, Musik wird kurz leiser. Die maximale Herzfrequenz bestimmt deine Herzfrequenzzonen; ohne Angabe wird der höchste gemessene Wert verwendet.")
+                    Text("Sprachansagen: Zeit und Kilometer-Split nach jedem Kilometer, beim Folgen einer Route auch die Abzweigungen; Musik wird kurz leiser. Die Live-Aktivität zeigt Zeit, Distanz, Pace und die nächste Abzweigung auf dem Sperrbildschirm. Die maximale Herzfrequenz bestimmt deine Herzfrequenzzonen; ohne Angabe wird der höchste gemessene Wert verwendet.")
                 }
 
                 #if DEBUG

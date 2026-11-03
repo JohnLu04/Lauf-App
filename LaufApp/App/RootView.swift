@@ -19,6 +19,8 @@ struct RootView: View {
         }
         // Neue Läufe aus Apple Health und von Strava (z. B. von der Garmin-Uhr) beim Öffnen der App holen
         .task {
+            // Live-Aktivität eines abgebrochenen Laufs (z. B. nach Absturz) entfernen
+            if !recorder.isSessionActive { LiveActivityController.shared.endAll() }
             await HealthSync.shared.syncIfNeeded(context: modelContext)
             await StravaSync.shared.syncIfNeeded(context: modelContext)
         }

@@ -51,6 +51,12 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 - Läufe, die schon von Strava importiert oder mit LaufApp aufgezeichnet wurden, werden nicht doppelt angelegt; liegt ein Lauf in beiden Quellen, wird er verknüpft
 - Einrichtung im Profil unter „Apple Health“
 
+**Live-Aktivität (Sperrbildschirm und Dynamic Island)**
+- Während eines Laufs: Zeit, Distanz und Pace auf dem Sperrbildschirm und in der Dynamic Island, „Pausiert“ in der Pause
+- Beim Folgen einer Route: die nächste Abzweigung mit Pfeil und Entfernung („In 120 m links abbiegen“), die Reststrecke und ein Hinweis, wenn du von der Route abkommst
+- Abzweigungen werden zusätzlich etwa 50 m vorher angesagt
+- Bei geführten Workouts steht der aktuelle Abschnitt in der Anzeige; im Profil abschaltbar
+
 **Läufe nachtragen**
 - Über „+“ auf der Startseite einen Lauf ohne Aufzeichnung eintragen: Datum, Distanz, Zeit, optional eine gespeicherte Route (mit Karte und Höhenprofil), Höhenmeter, Herzfrequenz, Anstrengung und Notizen
 - Wird auf Wunsch der Einheit des Trainingsplans an diesem Tag zugeordnet; Distanz und Zeit lassen sich später bearbeiten

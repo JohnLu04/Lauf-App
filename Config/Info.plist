@@ -12,6 +12,8 @@
 	<string>LaufApp übernimmt deine Lauftrainings aus Apple Health – mit Strecke, Herzfrequenz und Schritten –, damit du sie in deiner Übersicht siehst.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>LaufApp schreibt keine Daten in Apple Health; der Zugriff wird nur in Testversionen für Beispieltrainings verwendet.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

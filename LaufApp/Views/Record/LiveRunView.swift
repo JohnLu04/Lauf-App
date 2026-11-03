@@ -35,9 +35,13 @@ struct LiveRunView: View {
             controls
         }
         .background(Color(.systemBackground))
-        .confirmationDialog("Lauf beenden?", isPresented: $confirmFinish, titleVisibility: .visible) {
-            Button("Beenden und speichern") { recorder.finish() }
+        // Als Hinweisfenster statt Aktionsblatt: Das Aktionsblatt erscheint unter iOS 26 in der
+        // Vollbildansicht außerhalb des sichtbaren Bereichs.
+        .alert("Lauf beenden?", isPresented: $confirmFinish) {
             Button("Abbrechen", role: .cancel) {}
+            Button("Beenden") { recorder.finish() }
+        } message: {
+            Text("Danach kannst du den Lauf speichern.")
         }
     }
 
