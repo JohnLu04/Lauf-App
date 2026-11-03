@@ -19,6 +19,7 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 - Höhenmeter und Höhenprofil jeder Route (Höhendaten: Open-Meteo / Copernicus DEM, bei Ausfall Valhalla der FOSSGIS oder OpenTopoData); beim Vorschlagen optional „Höhenmeter meiden“ für möglichst flache Runden
 - Rundkurs vorschlagen: Wunschdistanz wählen, die App erzeugt Runden ab deinem Standort, bevorzugt durch Parks, Wälder und Grünflächen (Daten: © OpenStreetMap-Mitwirkende, ersatzweise Apple Karten)
 - Beim Laufen: Route auf der Karte, „Noch x km bis zum Ziel“, Warnung bei Abweichung (Anzeige und Sprachansage)
+- Gelaufene Strecken als Route speichern: in der Laufansicht über „⋯ › Als Route speichern“ oder in der Routenliste über „+ › Aus gelaufener Strecke“
 
 **Aktivitäten**
 - Feed mit Karten-Vorschau und Wochenübersicht

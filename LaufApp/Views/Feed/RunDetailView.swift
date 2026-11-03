@@ -18,6 +18,8 @@ struct RunDetailView: View {
     @State private var isRefreshingPhotos = false
     @State private var photoMessage: String?
     @State private var isLoadingSocial = false
+    @State private var showSaveRoute = false
+    @State private var routeName = ""
     @Query private var allRuns: [Run]
     @State private var showEdit = false
     @State private var confirmDelete = false
@@ -85,6 +87,12 @@ struct RunDetailView: View {
         .toolbar {
             Menu {
                 Button("Bearbeiten", systemImage: "pencil") { showEdit = true }
+                if points.count > 1, !run.isManual {
+                    Button("Als Route speichern", systemImage: "point.topleft.down.to.point.bottomright.curvepath") {
+                        routeName = PlannedRoute.defaultName(for: run)
+                        showSaveRoute = true
+                    }
+                }
                 if run.stravaID != nil && StravaSync.shared.isConnected {
                     Button("Von Strava aktualisieren", systemImage: "arrow.triangle.2.circlepath") {
                         Task { await refreshFromStrava() }
@@ -97,6 +105,13 @@ struct RunDetailView: View {
             }
         }
         .sheet(isPresented: $showEdit) { EditRunView(run: run) }
+        .alert("Als Route speichern", isPresented: $showSaveRoute) {
+            TextField("Name", text: $routeName)
+            Button("Sichern") { saveAsRoute() }
+            Button("Abbrechen", role: .cancel) {}
+        } message: {
+            Text("Die Strecke dieses Laufs erscheint danach unter „Routen“ und kann beim nächsten Lauf gewählt werden.")
+        }
         .confirmationDialog("Lauf löschen?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Löschen", role: .destructive) {
                 // Erst zurücknavigieren, dann löschen, damit die Ansicht nicht auf ein gelöschtes Objekt zugreift.
@@ -144,6 +159,24 @@ struct RunDetailView: View {
             heartRateSeries = RunAnalysis.sensorSeries(sensors) { $0.heartRate }
             cadenceSeries = RunAnalysis.sensorSeries(sensors) { $0.cadence }
             zoneTimes = HeartRateZones.timeInZones(sensors, maxHeartRate: HeartRateZones.maxHeartRate(runs: allRuns))
+        }
+    }
+
+    private func saveAsRoute() {
+        let trimmed = routeName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let route = PlannedRoute.fromRun(run, name: trimmed.isEmpty ? PlannedRoute.defaultName(for: run) : trimmed)
+        else { return }
+        context.insert(route)
+        try? context.save()
+        Task {
+            withAnimation { photoMessage = "Route „\(route.name)“ gespeichert." }
+            // Höhenprofil gleich berechnen (sonst beim nächsten Öffnen der Routenliste)
+            if let profile = await ElevationService.profile(for: route.path) {
+                route.elevation = profile
+                try? context.save()
+            }
+            try? await Task.sleep(for: .seconds(2.5))
+            withAnimation { photoMessage = nil }
         }
     }
 

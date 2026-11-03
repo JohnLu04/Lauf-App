@@ -83,8 +83,66 @@ final class PlannedRoute {
     }
 }
 
+extension PlannedRoute {
+    /// Route aus einem gelaufenen Lauf: die GPS-Strecke (vereinfacht) als Verlauf, dazu Wegpunkte
+    /// etwa alle 500 m, damit sich die Route später im Editor anpassen lässt.
+    static func fromRun(_ run: Run, name: String) -> PlannedRoute? {
+        let points = run.route.map { RouteCoordinate(latitude: $0.latitude, longitude: $0.longitude) }
+        var path = RouteGeometry.simplified(points, tolerance: 3)
+        guard path.count > 1, RouteGeometry.length(path) > 100 else { return nil }
+        // Endet der Lauf nahe am Start, als Rundkurs schließen
+        if let first = path.first, let last = path.last, first.distance(to: last) < 80, first.distance(to: last) > 1 {
+            path.append(first)
+        }
+        var waypoints = [path[0]]
+        var sinceLast = 0.0
+        for (a, b) in zip(path, path.dropFirst()) {
+            sinceLast += a.distance(to: b)
+            if sinceLast >= 500 {
+                waypoints.append(b)
+                sinceLast = 0
+            }
+        }
+        if let last = path.last, waypoints.last.map({ $0.distance(to: last) > 30 }) ?? true {
+            waypoints.append(last)
+        } else if let last = path.last {
+            waypoints[waypoints.count - 1] = last
+        }
+        return PlannedRoute(name: name, waypoints: waypoints, path: path, followsPaths: true)
+    }
+
+    /// Vorschlag für den Namen einer Route aus einem Lauf, z. B. „Morgenlauf · 28. Okt.“
+    static func defaultName(for run: Run) -> String {
+        "\(run.title) · \(run.startDate.formatted(.dateTime.day().month(.abbreviated)))"
+    }
+}
+
 /// Geometrie auf einer Route: Länge, Abstand zur Route und Fortschritt.
 enum RouteGeometry {
+    /// Weniger Punkte bei gleicher Form (Douglas-Peucker, Toleranz in Metern)
+    static func simplified(_ path: [RouteCoordinate], tolerance: Double) -> [RouteCoordinate] {
+        guard path.count > 2 else { return path }
+        var keep = [Bool](repeating: false, count: path.count)
+        keep[0] = true
+        keep[path.count - 1] = true
+        var stack = [(0, path.count - 1)]
+        while let (start, end) = stack.popLast() {
+            guard end > start + 1 else { continue }
+            let segment = [path[start], path[end]]
+            var maxDistance = 0.0, index = start
+            for i in (start + 1)..<end {
+                let d = nearest(to: path[i], on: segment)?.distance ?? 0
+                if d > maxDistance { maxDistance = d; index = i }
+            }
+            if maxDistance > tolerance {
+                keep[index] = true
+                stack.append((start, index))
+                stack.append((index, end))
+            }
+        }
+        return path.indices.filter { keep[$0] }.map { path[$0] }
+    }
+
     static func length(_ path: [RouteCoordinate]) -> Double {
         zip(path, path.dropFirst()).reduce(0) { $0 + $1.0.distance(to: $1.1) }
     }
