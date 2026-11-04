@@ -11,6 +11,8 @@ struct RecordView: View {
     @State private var linkWorkout = true
     @State private var selectedRoute: PlannedRoute?
     @State private var showRoutes = false
+    @State private var arrows: [RouteArrow] = []
+    @State private var heading = 0.0
 
     private var todaysWorkout: PlannedWorkout? { plans.first?.workout(on: .now) }
 
@@ -21,7 +23,9 @@ struct RecordView: View {
                     UserAnnotation()
                     if let route = selectedRoute, route.path.count > 1 {
                         MapPolyline(coordinates: route.path.map(\.coordinate))
-                            .stroke(Color.accentColor.opacity(0.8), style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                            // Ohne .opacity: Damit löst MapKit die Akzentfarbe nicht auf und zeichnet blau
+                            .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                        RouteArrowsLayer(arrows: arrows, mapHeading: heading)
                         if let start = route.path.first {
                             Annotation("Start", coordinate: start.coordinate, anchor: .center) {
                                 Circle().fill(.green).frame(width: 14, height: 14)
@@ -35,6 +39,7 @@ struct RecordView: View {
                     MapUserLocationButton()
                     MapCompass()
                 }
+                .routeArrows(for: selectedRoute?.path ?? [], arrows: $arrows, heading: $heading)
 
                 VStack(spacing: 14) {
                     if !recorder.hasLocationPermission {

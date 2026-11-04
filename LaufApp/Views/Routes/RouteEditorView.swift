@@ -20,6 +20,8 @@ struct RouteEditorView: View {
     @State private var showSave = false
     @State private var name = ""
     @State private var loaded = false
+    @State private var arrows: [RouteArrow] = []
+    @State private var heading = 0.0
     @State private var elevation: ElevationProfile?
     @State private var isLoadingElevation = false
     @State private var showNetworkError = false
@@ -58,6 +60,7 @@ struct RouteEditorView: View {
                     if path.count > 1 {
                         MapPolyline(coordinates: path.map(\.coordinate))
                             .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                        RouteArrowsLayer(arrows: arrows, mapHeading: heading)
                     }
                     // Bei Rundkursen liegt das Ziel auf dem Start: dann nur den Startpunkt zeigen
                     ForEach(Array(waypoints.enumerated()).filter { !(isLoop && $0.offset == waypoints.count - 1) }
@@ -73,6 +76,7 @@ struct RouteEditorView: View {
                     MapCompass()
                     MapScaleView()
                 }
+                .routeArrows(for: path, arrows: $arrows, heading: $heading)
                 .onTapGesture { location in
                     if let coordinate = proxy.convert(location, from: .local) {
                         addWaypoint(RouteCoordinate(coordinate))

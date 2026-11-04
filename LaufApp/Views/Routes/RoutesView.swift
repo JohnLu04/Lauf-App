@@ -158,7 +158,7 @@ struct RouteRow: View {
     }
 }
 
-/// Form der Strecke als Vorschau (ohne Karte), mit grünem Start- und rotem Zielpunkt.
+/// Form der Strecke als Vorschau (ohne Karte), mit grünem Start- und rotem Zielpunkt und drei Richtungspfeilen.
 struct RouteShapeView: View {
     let path: [RouteCoordinate]
 
@@ -180,6 +180,17 @@ struct RouteShapeView: View {
             var line = Path()
             line.addLines(points.map(map))
             ctx.stroke(line, with: .color(.accentColor), style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+            for arrow in RouteGeometry.arrows(path, count: 3) {
+                let p = map(CGPoint(x: arrow.coordinate.longitude * cos(lat0 * .pi / 180), y: -arrow.coordinate.latitude))
+                var arrowCtx = ctx
+                arrowCtx.translateBy(x: p.x, y: p.y)
+                arrowCtx.rotate(by: .degrees(arrow.bearing))
+                // Hin- und Rückweg auf derselben Straße: Pfeil rechts neben die Linie
+                let rect = CGRect(x: (arrow.isShared ? 4 : 0) - 3.5, y: -4, width: 7, height: 8)
+                let head = ArrowHead().path(in: rect)
+                arrowCtx.fill(head, with: .color(.accentColor))
+                arrowCtx.stroke(head, with: .color(.white), style: StrokeStyle(lineWidth: 1, lineJoin: .round))
+            }
             let end = map(points.last!), start = map(points.first!)
             ctx.fill(Path(ellipseIn: CGRect(x: end.x - 3, y: end.y - 3, width: 6, height: 6)), with: .color(.red))
             ctx.fill(Path(ellipseIn: CGRect(x: start.x - 3.5, y: start.y - 3.5, width: 7, height: 7)), with: .color(.green))

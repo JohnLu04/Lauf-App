@@ -30,7 +30,7 @@ struct RunDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                RouteMapView(points: points, interactive: true)
+                RouteMapView(points: points, interactive: true, showsDirection: true)
                     .frame(height: 300)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
 

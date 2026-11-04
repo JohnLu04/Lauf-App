@@ -21,6 +21,8 @@ struct RouteSuggestView: View {
     @State private var showNetworkError = false
     @State private var suggestions: [LoopSuggestion] = []
     @State private var selectedID: UUID?
+    @State private var arrows: [RouteArrow] = []
+    @State private var heading = 0.0
     @State private var status: String?
     @State private var isSearching = false
     @State private var source: GreenSpaceFinder.Source?
@@ -73,9 +75,11 @@ struct RouteSuggestView: View {
             if let selected {
                 MapPolyline(coordinates: selected.path.map(\.coordinate))
                     .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                RouteArrowsLayer(arrows: arrows, mapHeading: heading)
             }
         }
         .mapControls { MapUserLocationButton() }
+        .routeArrows(for: selected?.path ?? [], arrows: $arrows, heading: $heading)
     }
 
     // MARK: - Bedienung

@@ -6,6 +6,8 @@ struct LiveRunView: View {
     @Environment(RunRecorder.self) private var recorder
     @State private var position: MapCameraPosition = .userLocation(followsHeading: false, fallback: .automatic)
     @State private var confirmFinish = false
+    @State private var arrows: [RouteArrow] = []
+    @State private var heading = 0.0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -15,6 +17,9 @@ struct LiveRunView: View {
                 if recorder.routePath.count > 1 {
                     MapPolyline(coordinates: recorder.routePath.map(\.coordinate))
                         .stroke(Color.blue.opacity(0.45), style: StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round))
+                    // Pfeile nur vor dem Läufer; vor dem Einstieg in die Route alle
+                    RouteArrowsLayer(arrows: arrows, mapHeading: heading, color: .blue,
+                                     progress: recorder.hasJoinedRoute ? recorder.routeProgress : nil)
                     if let start = recorder.routePath.first, !recorder.hasJoinedRoute {
                         Annotation("Start", coordinate: start.coordinate, anchor: .center) {
                             Circle().fill(.green).frame(width: 14, height: 14)
@@ -29,6 +34,7 @@ struct LiveRunView: View {
                 }
             }
             .mapControls { MapUserLocationButton() }
+            .routeArrows(for: recorder.routePath, arrows: $arrows, heading: $heading)
             .overlay(alignment: .top) { statusBar }
 
             metrics

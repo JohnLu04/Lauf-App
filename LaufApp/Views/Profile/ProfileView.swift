@@ -99,10 +99,11 @@ struct ProfileView: View {
                 Section {
                     Button("Demo-Lauf hinzufügen") { context.insert(DemoData.makeRun()) }
                     Button("Demo-Krafttraining hinzufügen") { DemoData.makeStrengthSessions().forEach(context.insert) }
+                    Button("Demo-Route (hin und zurück) hinzufügen") { context.insert(DemoData.makeOutAndBackRoute()) }
                 } header: {
                     Text("Entwickler")
                 } footer: {
-                    Text("Nur in Debug-Builds sichtbar. Erzeugt Testdaten (zufälliger Lauf bzw. sechs Krafteinheiten der letzten Wochen).")
+                    Text("Nur in Debug-Builds sichtbar. Erzeugt Testdaten (zufälliger Lauf, sechs Krafteinheiten der letzten Wochen bzw. eine Route mit Hin- und Rückweg).")
                 }
                 #endif
             }

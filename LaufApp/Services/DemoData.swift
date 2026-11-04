@@ -108,6 +108,18 @@ enum DemoData {
         }
     }
 
+    /// Strecke mit Hin- und Rückweg auf denselben Straßen und einer kleinen Schleife am Wendepunkt
+    /// (zum Prüfen der Richtungspfeile)
+    static func makeOutAndBackRoute() -> PlannedRoute {
+        let out = [(49.2323, 7.0000), (49.2300, 6.9985), (49.2285, 7.0010), (49.2270, 7.0050),
+                   (49.2255, 7.0095), (49.2245, 7.0130)]
+            .map { RouteCoordinate(latitude: $0.0, longitude: $0.1) }
+        let loop = [(49.2235, 7.0142), (49.2226, 7.0122), (49.2237, 7.0108), (49.2245, 7.0130)]
+            .map { RouteCoordinate(latitude: $0.0, longitude: $0.1) }
+        let path = ElevationService.resample(out + loop + out.reversed().dropFirst(), every: 10).map(\.point)
+        return PlannedRoute(name: "Demo: Hin und zurück", waypoints: [out[0], out[5], out[0]], path: path, followsPaths: false)
+    }
+
     static func makeRun() -> Run {
         let daysAgo = Int.random(in: 0...20)
         let start = Calendar.current.date(byAdding: .day, value: -daysAgo, to: .now)!

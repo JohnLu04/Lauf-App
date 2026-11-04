@@ -20,6 +20,7 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 - Rundkurs vorschlagen: Wunschdistanz wählen, die App erzeugt Runden ab deinem Standort, bevorzugt durch Parks, Wälder und Grünflächen (Daten: © OpenStreetMap-Mitwirkende, ersatzweise Apple Karten)
 - Beim Laufen: Route auf der Karte, „Noch x km bis zum Ziel“, Warnung bei Abweichung (Anzeige und Sprachansage)
 - Gelaufene Strecken als Route speichern: in der Laufansicht über „⋯ › Als Route speichern“ oder in der Routenliste über „+ › Aus gelaufener Strecke“
+- Richtungspfeile auf allen Routenkarten, beim Laufen und in der Laufansicht: Wo Hin- und Rückweg auf derselben Straße liegen, sitzt jeder Pfeil rechts neben der Linie (wie zwei Fahrspuren). Beim Laufen verschwinden die Pfeile hinter dir, die nächsten 500 m sind hervorgehoben
 
 **Aktivitäten**
 - Feed mit Karten-Vorschau und Wochenübersicht
