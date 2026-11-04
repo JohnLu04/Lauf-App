@@ -157,6 +157,7 @@ final class HealthSync {
                     continue
                 }
                 let run = try await makeRun(from: workout)
+                run.shoeID = Shoe.defaultShoeID(for: run.startDate, in: context)
                 context.insert(run)
                 try? context.save()
                 existing.append(run)

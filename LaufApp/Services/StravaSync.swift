@@ -137,6 +137,8 @@ final class StravaSync {
         }
         Keychain.set(nil, for: tokensKey)
         defaults.removeObject(forKey: "strava.athleteName")
+        defaults.removeObject(forKey: "strava.gearBackfill")
+        defaults.removeObject(forKey: "strava.gearRefresh")
         syncedUntil = nil
         lastSyncDate = nil
         lastResult = nil
@@ -385,6 +387,73 @@ final class StravaSync {
         }
     }
 
+    // MARK: - Schuhe
+
+    /// Schuhe aus Strava übernehmen: Läufe ihrem Schuh zuordnen und den Kilometerstand abgleichen.
+    /// Beim ersten Mal werden die Schuhe aller älteren Strava-Läufe nachgetragen. Die Angaben der
+    /// Schuhe werden höchstens alle 6 Stunden neu abgefragt, außer es taucht ein neuer Schuh auf.
+    private func syncShoes(activities: [StravaImport.Activity], context: ModelContext) async throws {
+        let runs = try context.fetch(FetchDescriptor<Run>())
+        let byID = Dictionary(runs.compactMap { run in run.stravaID.map { ($0, run) } }, uniquingKeysWith: { a, _ in a })
+        var gearByActivity: [Int: String] = [:]
+        for activity in activities { if let gear = activity.gearId { gearByActivity[activity.id] = gear } }
+
+        let backfill = !defaults.bool(forKey: "strava.gearBackfill")
+        if backfill, let oldest = runs.compactMap({ $0.stravaID != nil ? $0.startDate : nil }).min() {
+            for page in 1...5 {
+                let batch: [StravaImport.Activity] = try await get("/athlete/activities", query: [
+                    URLQueryItem(name: "after", value: String(Int(oldest.timeIntervalSince1970) - 86_400)),
+                    URLQueryItem(name: "per_page", value: "200"),
+                    URLQueryItem(name: "page", value: String(page)),
+                ]) ?? []
+                for activity in batch where activity.isRun {
+                    if let gear = activity.gearId { gearByActivity[activity.id] = gear }
+                }
+                if batch.count < 200 { break }
+            }
+        }
+
+        var shoes = try context.fetch(FetchDescriptor<Shoe>())
+        // Nur Schuhe („g…“), keine Räder
+        let newGear = Set(gearByActivity.values.filter { $0.hasPrefix("g") })
+        let known = Set(shoes.compactMap(\.stravaGearID))
+        let lastRefresh = defaults.object(forKey: "strava.gearRefresh") as? Date ?? .distantPast
+        let refreshAll = backfill || !newGear.isSubset(of: known) || Date.now.timeIntervalSince(lastRefresh) > 6 * 3600
+        let gearIDs = refreshAll ? newGear.union(known) : newGear
+
+        for gearID in gearIDs.sorted() {
+            guard let gear: StravaImport.Gear = try await get("/gear/\(gearID)") else { continue }
+            let shoe: Shoe
+            if let existing = shoes.first(where: { $0.stravaGearID == gearID }) {
+                shoe = existing
+            } else {
+                // In Gebrauch seit dem ersten bekannten Lauf mit diesem Schuh
+                let firstRun = gearByActivity.filter { $0.value == gearID }.compactMap { byID[$0.key]?.startDate }.min()
+                shoe = Shoe(brand: "", model: "", startDate: firstRun ?? .now)
+                shoe.stravaGearID = gearID
+                context.insert(shoe)
+                shoes.append(shoe)
+            }
+            shoe.brand = gear.brandName ?? shoe.brand
+            shoe.model = gear.modelName ?? shoe.model
+            // Strava-Name nur als eigener Name übernehmen, wenn er mehr sagt als Marke und Modell
+            let name = (gear.name ?? "").trimmingCharacters(in: .whitespaces)
+            shoe.nickname = name.isEmpty || name == "\(shoe.brand) \(shoe.model)" ? "" : name
+            if let retired = gear.retired { shoe.isRetired = retired }
+            if gear.primary == true, !shoe.isRetired, !shoes.contains(where: { $0.isDefault }) { shoe.isDefault = true }
+
+            for (activityID, id) in gearByActivity where id == gearID {
+                byID[activityID]?.shoeID = shoe.id
+            }
+            // Strava-Kilometerstand abzüglich der Strava-Läufe, die in der App diesem Schuh zugeordnet sind;
+            // Läufe nur in der App (nicht bei Strava) kommen beim Zählen noch dazu
+            let linked = runs.filter { $0.shoeID == shoe.id && $0.stravaID != nil }.reduce(0) { $0 + $1.distance }
+            shoe.initialDistance = max(0, gear.distance - linked)
+        }
+        if refreshAll { defaults.set(Date.now, forKey: "strava.gearRefresh") }
+        if backfill { defaults.set(true, forKey: "strava.gearBackfill") }
+    }
+
     // MARK: - Import
 
     /// Synchronisiert höchstens alle 5 Minuten (z. B. beim Öffnen der App).
@@ -455,6 +524,9 @@ final class StravaSync {
                 try? await refreshRecentSocial(runs: runs)
                 try? context.save()
             }
+            // Schuhe und ihre Kilometer ebenfalls nur als Extra
+            try? await syncShoes(activities: activities.filter(\.isRun), context: context)
+            try? context.save()
             lastSyncDate = .now
             lastResult = imported == 0 ? "Keine neuen Läufe." : (imported == 1 ? "1 neuer Lauf importiert." : "\(imported) neue Läufe importiert.")
         } catch {

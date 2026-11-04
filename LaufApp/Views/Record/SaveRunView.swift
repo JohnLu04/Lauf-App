@@ -10,6 +10,8 @@ struct SaveRunView: View {
     @State private var notes = ""
     @State private var effort = 0
     @State private var photos: [PendingPhoto] = []
+    @State private var shoeID: UUID?
+    @Query private var shoes: [Shoe]
     @State private var confirmDiscard = false
 
     init(draft: RunDraft) {
@@ -46,6 +48,9 @@ struct SaveRunView: View {
                 Section("Gefühlte Anstrengung") {
                     EffortSlider(effort: $effort)
                 }
+                if !shoes.isEmpty {
+                    Section { ShoePickerRow(selection: $shoeID) }
+                }
                 PendingPhotosSection(photos: $photos)
                 Section {
                     Button("Lauf verwerfen", role: .destructive) { confirmDiscard = true }
@@ -58,6 +63,7 @@ struct SaveRunView: View {
                     Button("Speichern") { save() }.bold()
                 }
             }
+            .onAppear { shoeID = Shoe.defaultShoe(in: context)?.id }
             .confirmationDialog("Lauf wirklich verwerfen?", isPresented: $confirmDiscard, titleVisibility: .visible) {
                 Button("Verwerfen", role: .destructive) {
                     photos.forEach { $0.discard() }
@@ -72,6 +78,7 @@ struct SaveRunView: View {
                                       title: title.isEmpty ? RunAnalysis.defaultTitle(for: draft.startDate) : title,
                                       notes: notes, effort: effort)
         PhotoAttachment.attach(photos, to: run)
+        run.shoeID = shoeID
         context.insert(run)
         try? context.save()
         recorder.clearDraft()

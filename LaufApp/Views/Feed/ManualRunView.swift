@@ -20,6 +20,8 @@ struct ManualRunView: View {
     @State private var notes = ""
     @State private var linkWorkout = true
     @State private var photos: [PendingPhoto] = []
+    @State private var shoeID: UUID?
+    @Query private var shoes: [Shoe]
     @FocusState private var focused: Bool
 
     private var distance: Double { (Self.number(distanceText) ?? 0) * 1000 }
@@ -98,6 +100,10 @@ struct ManualRunView: View {
                         .focused($focused)
                 }
 
+                if !shoes.isEmpty {
+                    Section { ShoePickerRow(selection: $shoeID) }
+                }
+
                 PendingPhotosSection(photos: $photos)
 
                 if let workout = plannedWorkout {
@@ -130,7 +136,10 @@ struct ManualRunView: View {
                     Button("Fertig") { focused = false }
                 }
             }
-            .onAppear { updateTitle() }
+            .onAppear {
+                updateTitle()
+                shoeID = Shoe.defaultShoe(in: context)?.id
+            }
             .onChange(of: startDate) { _, _ in updateTitle() }
             .onChange(of: routeID) { _, _ in
                 guard let route else { return }
@@ -175,6 +184,7 @@ struct ManualRunView: View {
         if linkWorkout, let workout = plannedWorkout { run.plannedWorkoutID = workout.id }
         // Keine Splits und Bestzeiten: Ohne Aufzeichnung ist der Verlauf der Pace unbekannt.
         PhotoAttachment.attach(photos, to: run)
+        run.shoeID = shoeID
         context.insert(run)
         try? context.save()
         dismiss()

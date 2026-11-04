@@ -28,6 +28,7 @@ Eine kostenlose, private Lauf-App für iOS (SwiftUI). Kein Konto, kein Abo und k
 - Detailansicht: Karte, Kilometer-Splits, Pace-Diagramm, Höhenprofil, Höhenmeter
 - Bestleistungen pro Lauf (400 m, 1 km, Meile, 5 km, 10 km, HM, Marathon)
 - Titel, Notizen und gefühlte Anstrengung (1–10)
+- Schuh-Kilometer (Profil → „Schuhe“): Schuhe mit Marke und Modell anlegen, Standardschuh für neue Läufe, Schuh je Lauf änderbar; Hinweis auf der Startseite, wenn die empfohlene Laufleistung (Standard 700 km) erreicht ist. Schuhe aus Strava werden mit Kilometerstand übernommen und ihren Läufen zugeordnet
 - Eigene Fotos und Videos anhängen: direkt beim Speichern nach dem Lauf oder später in der Laufansicht (aus der Mediathek oder mit der Kamera), mit Beschreibung; eigene Fotos lassen sich wieder löschen
 
 **Training**
@@ -135,7 +136,6 @@ Shared/             Gemeinsamer Code von App und Erweiterung
 **Training**
 - Krafteinheiten in den Laufplan einplanen (an lockeren Tagen) und in den Kalender exportieren
 - Trainingsbelastung und Erholung (akute vs. chronische Belastung) mit Warnung bei zu schneller Steigerung
-- Schuh-Kilometer zählen mit Hinweis, wenn ein Paar ausgetauscht werden sollte
 - Widget für den Home-Bildschirm: Wochenkilometer und nächste Einheit
 - Siri-Kurzbefehle („Starte einen lockeren Lauf“)
 

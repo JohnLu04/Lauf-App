@@ -3,6 +3,7 @@ import SwiftData
 
 struct FeedView: View {
     @Query(sort: \Run.startDate, order: .reverse) private var runs: [Run]
+    @Query(filter: #Predicate<Shoe> { $0.isRetired == false }) private var shoes: [Shoe]
     @State private var showManualRun = false
 
     var body: some View {
@@ -19,6 +20,13 @@ struct FeedView: View {
                     .padding(.top, 80)
                 } else {
                     LazyVStack(spacing: 12) {
+                        // Hinweis, wenn Schuhe ausgetauscht werden sollten
+                        ForEach(shoes) { shoe in
+                            let distance = shoe.distance(in: runs)
+                            if shoe.needsReplaceHint(distance: distance) {
+                                ShoeReplaceCard(shoe: shoe, distance: distance)
+                            }
+                        }
                         WeekSummaryCard(runs: runs)
                         ForEach(runs) { run in
                             NavigationLink(value: run) {

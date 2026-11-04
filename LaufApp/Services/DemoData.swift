@@ -120,6 +120,17 @@ enum DemoData {
         return PlannedRoute(name: "Demo: Hin und zurück", waypoints: [out[0], out[5], out[0]], path: path, followsPaths: false)
     }
 
+    /// Zwei Schuhe: ein fast abgelaufenes Standardpaar (bekommt alle Läufe der letzten 30 Tage) und ein neues Paar
+    static func makeShoes(runs: [Run]) -> [Shoe] {
+        let worn = Shoe(brand: "Nike", model: "Pegasus 41", startDate: .now.addingTimeInterval(-300 * 86_400))
+        worn.initialDistance = 680_000
+        worn.isDefault = true
+        let fresh = Shoe(brand: "Hoka", model: "Mach 6", nickname: "Tempo-Schuh", startDate: .now.addingTimeInterval(-20 * 86_400))
+        fresh.initialDistance = 42_000
+        for run in runs where run.startDate > .now.addingTimeInterval(-30 * 86_400) { run.shoeID = worn.id }
+        return [worn, fresh]
+    }
+
     static func makeRun() -> Run {
         let daysAgo = Int.random(in: 0...20)
         let start = Calendar.current.date(byAdding: .day, value: -daysAgo, to: .now)!

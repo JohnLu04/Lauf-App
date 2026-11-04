@@ -24,6 +24,7 @@ struct RunDetailView: View {
     @State private var showSaveRoute = false
     @State private var routeName = ""
     @Query private var allRuns: [Run]
+    @Query(sort: \Shoe.createdAt) private var shoes: [Shoe]
     @State private var showEdit = false
     @State private var confirmDelete = false
 
@@ -52,6 +53,10 @@ struct RunDetailView: View {
                 }
 
                 statsGrid.card()
+
+                if !shoes.isEmpty || run.shoeID != nil {
+                    shoeCard.card()
+                }
 
                 if !photos.isEmpty {
                     RunPhotoGallery(run: run, photos: photos, showLibrary: $showPhotoLibrary, showCamera: $showCamera,
@@ -195,6 +200,37 @@ struct RunDetailView: View {
             heartRateSeries = RunAnalysis.sensorSeries(sensors) { $0.heartRate }
             cadenceSeries = RunAnalysis.sensorSeries(sensors) { $0.cadence }
             zoneTimes = HeartRateZones.timeInZones(sensors, maxHeartRate: HeartRateZones.maxHeartRate(runs: allRuns))
+        }
+    }
+
+    /// Schuh des Laufs mit Kilometerstand; über das Menü änderbar.
+    private var shoeCard: some View {
+        let shoe = shoes.first { $0.id == run.shoeID }
+        return HStack(spacing: 12) {
+            Image(systemName: "shoe.fill")
+                .foregroundStyle(.white)
+                .frame(width: 32, height: 32)
+                .background(shoe == nil ? Color.gray : Color.accentColor, in: Circle())
+            VStack(alignment: .leading, spacing: 2) {
+                Text(shoe?.displayName ?? "Kein Schuh zugeordnet").font(.subheadline.weight(.semibold))
+                if let shoe {
+                    let total = shoe.distance(in: allRuns)
+                    Text("Insgesamt \(Format.distance(total, decimals: 0))" + (shoe.status(distance: total).label.map { " · \($0)" } ?? ""))
+                        .font(.caption)
+                        .foregroundStyle(shoe.status(distance: total) == .fine ? Color.secondary : Color.orange)
+                }
+            }
+            Spacer()
+            Menu {
+                Picker("Schuh", selection: Binding(get: { run.shoeID }, set: { run.shoeID = $0; try? context.save() })) {
+                    Text("Kein Schuh").tag(UUID?.none)
+                    ForEach(shoes.filter { !$0.isRetired || $0.id == run.shoeID }) { shoe in
+                        Text(shoe.displayName).tag(UUID?.some(shoe.id))
+                    }
+                }
+            } label: {
+                Text(shoe == nil ? "Zuordnen" : "Ändern").font(.subheadline)
+            }
         }
     }
 

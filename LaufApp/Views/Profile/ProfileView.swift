@@ -4,6 +4,7 @@ import Charts
 
 struct ProfileView: View {
     @Query(sort: \Run.startDate, order: .reverse) private var runs: [Run]
+    @Query(sort: \Shoe.createdAt) private var shoes: [Shoe]
     @AppStorage("voiceFeedback") private var voiceFeedback = true
     @AppStorage("liveActivity") private var liveActivity = true
     @AppStorage(HeartRateZones.maxHeartRateKey) private var storedMaxHeartRate = 0.0
@@ -58,6 +59,25 @@ struct ProfileView: View {
 
                 Section {
                     NavigationLink {
+                        ShoesView()
+                    } label: {
+                        LabeledContent {
+                            if let shoe = shoes.first(where: { $0.isDefault && !$0.isRetired }) {
+                                Text("\(shoe.displayName) · \(Format.distance(shoe.distance(in: runs), decimals: 0))")
+                            } else {
+                                let count = shoes.filter { !$0.isRetired }.count
+                                Text(count == 0 ? "Keine" : "\(count) aktiv")
+                            }
+                        } label: {
+                            Label("Schuhe", systemImage: "shoe.fill")
+                        }
+                    }
+                } header: {
+                    Text("Ausrüstung")
+                }
+
+                Section {
+                    NavigationLink {
                         StravaSettingsView()
                     } label: {
                         LabeledContent {
@@ -100,10 +120,11 @@ struct ProfileView: View {
                     Button("Demo-Lauf hinzufügen") { context.insert(DemoData.makeRun()) }
                     Button("Demo-Krafttraining hinzufügen") { DemoData.makeStrengthSessions().forEach(context.insert) }
                     Button("Demo-Route (hin und zurück) hinzufügen") { context.insert(DemoData.makeOutAndBackRoute()) }
+                    Button("Demo-Schuhe hinzufügen") { DemoData.makeShoes(runs: runs).forEach(context.insert) }
                 } header: {
                     Text("Entwickler")
                 } footer: {
-                    Text("Nur in Debug-Builds sichtbar. Erzeugt Testdaten (zufälliger Lauf, sechs Krafteinheiten der letzten Wochen bzw. eine Route mit Hin- und Rückweg).")
+                    Text("Nur in Debug-Builds sichtbar. Erzeugt Testdaten (zufälliger Lauf, sechs Krafteinheiten der letzten Wochen bzw. eine Route mit Hin- und Rückweg bzw. zwei Schuhe, einer davon fast abgelaufen).")
                 }
                 #endif
             }

@@ -20,10 +20,25 @@ enum StravaImport {
         let totalPhotoCount: Int?
         let kudosCount: Int?
         let commentCount: Int?
+        /// Schuh bzw. Rad der Aktivität (Schuhe beginnen mit „g“, Räder mit „b“)
+        let gearId: String?
 
         var isRun: Bool {
             ["Run", "TrailRun", "VirtualRun"].contains(sportType ?? type) || type == "Run"
         }
+    }
+
+    /// Ausrüstung (Schuh) mit Kilometerstand laut Strava
+    struct Gear: Decodable {
+        let id: String
+        /// Name in Strava (oft Marke und Modell oder ein eigener Name)
+        let name: String?
+        let brandName: String?
+        let modelName: String?
+        /// Meter
+        let distance: Double
+        let primary: Bool?
+        let retired: Bool?
     }
 
     /// Athlet in Kudos- und Kommentarlisten (Nachname meist nur als Anfangsbuchstabe)

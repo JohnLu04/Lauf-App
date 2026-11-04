@@ -59,6 +59,8 @@ final class Run {
     /// 0 = keine Angabe, sonst 1–10
     var perceivedEffort: Int = 0
     var plannedWorkoutID: UUID?
+    /// Gelaufener Schuh (siehe `Shoe`)
+    var shoeID: UUID?
     /// Herkunft: "" = mit der App aufgezeichnet, "manual" = von Hand eingetragen, "strava" = von Strava,
     /// "health" = aus Apple Health
     var source: String = ""
