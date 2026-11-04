@@ -95,4 +95,43 @@ extension RouteGeometry {
         }
         return result
     }
+
+    /// Punkt auf der Strecke nach `along` Metern (am Anfang bzw. Ende begrenzt).
+    static func coordinate(on path: [RouteCoordinate], along: Double) -> RouteCoordinate? {
+        guard var previous = path.first else { return nil }
+        var covered = 0.0
+        for next in path.dropFirst() {
+            let d = previous.distance(to: next)
+            if covered + d >= along, d > 0 {
+                let t = max(0, (along - covered) / d)
+                return RouteCoordinate(latitude: previous.latitude + t * (next.latitude - previous.latitude),
+                                       longitude: previous.longitude + t * (next.longitude - previous.longitude))
+            }
+            covered += d
+            previous = next
+        }
+        return path.last
+    }
+
+    /// Richtung der Strecke (Grad, 0 = Norden) zwischen `along` und `along + length` – für eine
+    /// ruhige Kartendrehung beim Navigieren (der GPS-Kurs schwankt stärker).
+    static func bearing(on path: [RouteCoordinate], along: Double, length: Double = 40) -> Double? {
+        guard let a = coordinate(on: path, along: along), let b = coordinate(on: path, along: along + length),
+              a.distance(to: b) > 5 else { return nil }
+        return bearing(from: a, to: b)
+    }
+
+    static func bearing(from a: RouteCoordinate, to b: RouteCoordinate) -> Double {
+        let dx = (b.longitude - a.longitude) * cos(a.latitude * .pi / 180)
+        let dy = b.latitude - a.latitude
+        let degrees = atan2(dx, dy) * 180 / .pi
+        return degrees < 0 ? degrees + 360 : degrees
+    }
+
+    /// Punkt `meters` in Richtung `bearing` von `start` aus.
+    static func offset(_ start: RouteCoordinate, meters: Double, bearing: Double) -> RouteCoordinate {
+        let rad = bearing * .pi / 180
+        return RouteCoordinate(latitude: start.latitude + meters * cos(rad) / 110_540,
+                               longitude: start.longitude + meters * sin(rad) / (111_320 * cos(start.latitude * .pi / 180)))
+    }
 }

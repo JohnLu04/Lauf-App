@@ -8,6 +8,20 @@ struct LiveRunView: View {
     @State private var confirmFinish = false
     @State private var arrows: [RouteArrow] = []
     @State private var heading = 0.0
+    /// Kartenansicht beim Laufen mit Route
+    @State private var mapMode = MapMode.follow
+    /// Zuletzt verwendete Blickrichtung der Navigationsansicht
+    @State private var followHeading = 0.0
+    /// Höhe der Hinweise oben auf der Karte (Status, Route, Workout)
+    @State private var statusBarHeight: CGFloat = 0
+
+    /// Navigation: vergrößert, in Laufrichtung gedreht und geneigt (wie in Apple Karten).
+    /// Übersicht: ganze Route. Frei: vom Nutzer verschoben oder gezoomt.
+    private enum MapMode { case follow, overview, free }
+
+    /// Abstand der Kamera (Meter) und Neigung in der Navigationsansicht
+    private static let followDistance = 420.0
+    private static let followPitch = 50.0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,9 +47,27 @@ struct LiveRunView: View {
                         .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
                 }
             }
-            .mapControls { MapUserLocationButton() }
+            .mapStyle(.standard(elevation: recorder.hasRoute ? .realistic : .automatic))
+            .mapControls {
+                if recorder.hasRoute { MapCompass() } else { MapUserLocationButton() }
+            }
             .routeArrows(for: recorder.routePath, arrows: $arrows, heading: $heading)
-            .overlay(alignment: .top) { statusBar }
+            // Kartenausschnitt nur im sichtbaren Bereich unter den Hinweisen (Übersicht, Kompass, Mitte)
+            .safeAreaPadding(.top, statusBarHeight)
+            .overlay(alignment: .top) {
+                statusBar.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { statusBarHeight = $0 }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if recorder.hasRoute { mapModeButton }
+            }
+            .onAppear { updateCamera(animated: false) }
+            .onChange(of: recorder.lastLocation) { _, _ in
+                if mapMode == .follow { updateCamera(animated: true) }
+            }
+            // Verschiebt oder zoomt der Nutzer die Karte, nicht mehr automatisch nachführen
+            .onChange(of: position.positionedByUser) { _, byUser in
+                if byUser, recorder.hasRoute { mapMode = .free }
+            }
 
             metrics
             controls
@@ -49,6 +81,81 @@ struct LiveRunView: View {
         } message: {
             Text("Danach kannst du den Lauf speichern.")
         }
+    }
+
+    /// Wechsel zwischen Navigationsansicht und Übersicht der ganzen Route
+    private var mapModeButton: some View {
+        Button {
+            mapMode = mapMode == .follow ? .overview : .follow
+            updateCamera(animated: true)
+        } label: {
+            Group {
+                if mapMode == .follow {
+                    Label("Übersicht", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                } else {
+                    Label("Folgen", systemImage: "location.north.line.fill")
+                }
+            }
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(.regularMaterial, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .padding(12)
+    }
+
+    /// Kamera passend zur Ansicht setzen. Ohne Route folgt die Karte wie bisher dem Standort.
+    private func updateCamera(animated: Bool) {
+        guard recorder.hasRoute else { return }
+        let target: MapCameraPosition
+        switch mapMode {
+        case .free:
+            return
+        case .overview:
+            var path = recorder.routePath
+            if let location = recorder.lastLocation { path.append(RouteCoordinate(location.coordinate)) }
+            guard let rect = boundingRect(path) else { return }
+            target = .rect(rect)
+        case .follow:
+            guard let location = recorder.lastLocation else {
+                target = .userLocation(followsHeading: true, fallback: .automatic)
+                break
+            }
+            let here = RouteCoordinate(location.coordinate)
+            if let newHeading = navigationHeading(at: location) {
+                // Auf dem kürzeren Weg drehen (z. B. 350° → 10° über Norden, nicht einmal herum)
+                let delta = (newHeading - followHeading + 540).truncatingRemainder(dividingBy: 360) - 180
+                followHeading += delta
+            }
+            // Kartenmitte etwas voraus, damit mehr vom Weg vor einem zu sehen ist
+            let center = RouteGeometry.offset(here, meters: 25, bearing: followHeading)
+            target = .camera(MapCamera(centerCoordinate: center.coordinate, distance: Self.followDistance,
+                                       heading: followHeading, pitch: Self.followPitch))
+        }
+        if animated {
+            withAnimation(.easeInOut(duration: 0.9)) { position = target }
+        } else {
+            position = target
+        }
+    }
+
+    /// Blickrichtung beim Navigieren: auf der Route deren Verlauf voraus (ruhiger als der GPS-Kurs),
+    /// auf dem Weg zum Start die Richtung zum Startpunkt, sonst die Bewegungsrichtung.
+    private func navigationHeading(at location: CLLocation) -> Double? {
+        let here = RouteCoordinate(location.coordinate)
+        // Nur wenn der Fortschritt auf der Route zum Standort passt (verworfene GPS-Punkte lassen ihn sonst zurück)
+        if recorder.hasJoinedRoute, !recorder.isOffRoute,
+           let onRoute = RouteGeometry.coordinate(on: recorder.routePath, along: recorder.routeProgress),
+           onRoute.distance(to: here) < 50,
+           let bearing = RouteGeometry.bearing(on: recorder.routePath, along: recorder.routeProgress + 10) {
+            return bearing
+        }
+        if !recorder.hasJoinedRoute, let start = recorder.routePath.first, here.distance(to: start) > 30 {
+            return RouteGeometry.bearing(from: here, to: start)
+        }
+        if location.course >= 0, location.speed > 0.8 { return location.course }
+        return nil
     }
 
     private var statusBar: some View {
