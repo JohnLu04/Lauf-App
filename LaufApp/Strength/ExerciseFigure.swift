@@ -55,6 +55,9 @@ enum Limb {
     case angles(Double, Double)
     /// Zielpunkt im Raster; `bend` = Richtung (Grad, 0 = vorn, 90 = unten), in die das Gelenk zeigt
     case reach(CGPoint, bend: Double)
+    /// Arm auf den Unterarm gestützt (Übungen in Seitenlage): Oberarm mit festem Winkel in der Zeichenebene,
+    /// Unterarm liegt quer dazu nach vorn auf dem Boden
+    case forearmSupport(Double)
 }
 
 /// Eine Körperhaltung (Schlüsselbild der Animation).
@@ -78,14 +81,19 @@ struct Pose {
 /// Geräte und Hilfsmittel, die mitgezeichnet werden.
 enum Prop {
     case bench(x: Double, width: Double, height: Double)
+    /// Bank quer zur Zeichenebene (Beine an den Enden vorn und hinten, darunter ist Platz)
+    case crossBench(x: Double, width: Double, height: Double)
     case box(x: Double, width: Double, height: Double)
     case mat(x: Double, width: Double)
     case dumbbells
-    case dumbbell
+    /// Eine Kurzhantel, in der vorderen oder (bei `inFarHand`) der hinteren Hand
+    case dumbbell(inFarHand: Bool)
     case kettlebell
     case barbellBack
     /// Polster, das die Fersen festhält (Nordic Curl)
     case anklePad
+    /// Stange zum Festhalten für die hintere Hand (Gleichgewicht bei Übungen auf einem Bein)
+    case handPost
 }
 
 /// Ablauf einer Übung: Schlüsselbilder mit Halte- und Bewegungsdauer (Sekunden).
@@ -166,6 +174,8 @@ struct ResolvedPose {
             switch (a.limbs[i], b.limbs[i]) {
             case let (.reach(pa, ba), .reach(pb, bb)):
                 r.limbs[i] = .reach(CGPoint(x: lerp(pa.x, pb.x, t), y: lerp(pa.y, pb.y, t)), bend: lerp(ba, bb, t))
+            case let (.forearmSupport(fa), .forearmSupport(fb)):
+                r.limbs[i] = .forearmSupport(lerp(fa, fb, t))
             default:
                 // Unterschiedliche Angaben: über die tatsächlichen Winkel überblenden
                 let (a1, a2) = sa.limbAngles(i), (b1, b2) = sb.limbAngles(i)
@@ -189,7 +199,7 @@ private func lerpAngle(_ a: Double, _ b: Double, _ t: Double) -> Double {
 private func rad(_ deg: Double) -> Double { deg * .pi / 180 }
 
 /// Richtung einer Gliedmaße (0 = unten, positiv = vorn)
-private func limbDir(_ deg: Double) -> CGVector { CGVector(dx: sin(rad(deg)), dy: cos(rad(deg))) }
+func limbDir(_ deg: Double) -> CGVector { CGVector(dx: sin(rad(deg)), dy: cos(rad(deg))) }
 
 /// Gelenkpositionen im Raster.
 struct Skeleton {
@@ -233,6 +243,10 @@ struct Skeleton {
         case let .angles(a, b):
             let mid = root + limbDir(a + offset) * l1
             return (mid, mid + limbDir(b + offset) * l2)
+        case let .forearmSupport(a):
+            // Der Unterarm zeigt aus der Zeichenebene heraus; in der Ebene liegt die Hand am Ellbogen
+            let mid = root + limbDir(a + offset) * l1
+            return (mid, mid)
         case let .reach(target, bend):
             let v = target - root
             let d = min(max(v.length, abs(l1 - l2) + 0.01), l1 + l2 - 0.01)

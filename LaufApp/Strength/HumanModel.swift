@@ -250,6 +250,16 @@ enum MuscleRegions {
 
 // MARK: - Figur in der Szene
 
+/// Wie die Hände ein Gerät halten. Ohne Angabe liegen die Arme in der Zeichenebene unter den Schultern.
+enum HandHold {
+    /// Arme wie in der Haltung, die Hände aber um diese Strecke (m) seitlich nach außen versetzt –
+    /// z. B. damit Kurzhanteln neben den Beinen hängen statt in den Oberschenkeln
+    case spread(Float)
+    /// Fäuste an einem festen Punkt des Rumpfs (Ruhelage in Metern: x = links, y = oben, z = vorn),
+    /// `width` (m) auseinander; die Ellbogen zeigen in Richtung `elbows` (Ruhelage)
+    case trunk(SIMD3<Float>, width: Float, elbows: SIMD3<Float>)
+}
+
 /// Eine Figur mit eigenen Knoten, die Haltungen und Muskelfarben annehmen kann.
 final class HumanFigure {
     let model: HumanModel
@@ -259,6 +269,11 @@ final class HumanFigure {
     private var muscleKey = ""
     /// Finger zur Faust schließen (wenn ein Gewicht gehalten wird)
     var grip = false
+    /// Haltung der Hände an einem Gerät
+    var hold: HandHold?
+    /// Mitte der geschlossenen Faust (wo ein Griff liegt) relativ zum Handgelenk, in den Achsen der Ruhelage
+    /// (Arm waagrecht zur Seite, Handfläche unten)
+    static func fistOffset(left: Bool) -> SIMD3<Float> { SIMD3(left ? 0.09 : -0.09, -0.03, 0.005) }
 
     /// Umrechnung der 2D-Einheiten in Meter (Beinlänge des Modells / Beinlänge der 2D-Figur)
     static let unit: Float = 0.885 / Float(Body.thigh + Body.shin)
@@ -419,6 +434,30 @@ final class HumanFigure {
             return (start, mid, end)
         }
 
+        /// Punkt, der fest am Rumpf sitzt (Ruhelage), in der aktuellen Haltung
+        func onTrunk(_ rest: SIMD3<Float>) -> SIMD3<Float> { point(s.hip) + trunk * (rest - hipMid) }
+        /// Arm räumlich lösen: Schulter, Ziel des Handgelenks und Richtung, in die der Ellbogen zeigen soll
+        func driveArm(_ side: String, shoulder: SIMD3<Float>, wrist target: SIMD3<Float>, pole: SIMD3<Float>) {
+            let l1 = simd_length(restPosition("lowerarm_\(side)") - restPosition("upperarm_\(side)"))
+            let l2 = simd_length(restPosition("hand_\(side)") - restPosition("lowerarm_\(side)"))
+            let toTarget = target - shoulder
+            let d = min(max(simd_length(toTarget), abs(l1 - l2) + 0.001), l1 + l2 - 0.001)
+            let axis = simd_normalize(toTarget)
+            var bendDir = (pole - shoulder) - simd_dot(pole - shoulder, axis) * axis
+            if simd_length(bendDir) < 1e-4 { bendDir = simd_cross(axis, n) }
+            bendDir = simd_normalize(bendDir)
+            let cosA = max(-1, min(1, (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d)))
+            let elbow = shoulder + axis * (l1 * cosA) + bendDir * (l1 * (1 - cosA * cosA).squareRoot())
+            let upper = simd_normalize(elbow - shoulder)
+            let lower = simd_normalize(shoulder + axis * d - elbow)
+            // Beugeachse des Ellbogens: aus der Beugung, bei gestrecktem Arm aus der Richtung des Ellbogens
+            let hinge = simd_normalize(simd_cross(upper, lower) + 0.05 * simd_cross(bendDir, upper))
+            drive("upperarm_\(side)", d0: restDir("upperarm_\(side)", "lowerarm_\(side)"), f0: front,
+                  d1: upper, f1: simd_cross(hinge, upper))
+            drive("lowerarm_\(side)", d0: restDir("lowerarm_\(side)", "hand_\(side)"), f0: front,
+                  d1: lower, f1: simd_cross(hinge, lower))
+        }
+
         // Arme und Beine: Index 0 = vorderes (der Kamera zugewandtes) Glied
         for i in 0..<2 {
             let side = frontal ? (i == 0 ? "l" : "r") : (i == 0 ? "r" : "l")
@@ -426,11 +465,42 @@ final class HumanFigure {
                                  l1: Body.upperArm, l2: Body.forearm)
             let leg = limbJoints(pose.limbs[i], root: "thigh_\(side)", original: (s.hip, s.knee[i], s.ankle[i]),
                                  l1: Body.thigh, l2: Body.shin)
-            let upper = dir(arm.1 - arm.0), lower = dir(arm.2 - arm.1)
-            drive("upperarm_\(side)", d0: restDir("upperarm_\(side)", "lowerarm_\(side)"), f0: front,
-                  d1: upper, f1: frontal ? torsoFront : forwardPerp(upper))
-            drive("lowerarm_\(side)", d0: restDir("lowerarm_\(side)", "hand_\(side)"), f0: front,
-                  d1: lower, f1: frontal ? torsoFront : forwardPerp(lower))
+            let shoulder3D = onTrunk(restPosition("upperarm_\(side)"))
+            /// Richtung von der Körpermitte zu dieser Seite
+            let outward = simd_normalize(trunk * SIMD3(restPosition("upperarm_\(side)").x, 0, 0))
+            if case let .forearmSupport(angle) = pose.limbs[2 + i] {
+                // Oberarm in der Ebene, Unterarm nach vorn auf dem Boden
+                let upperDir = dir(limbDir(angle + (pose.armsFollowTorso ? pose.torso : 0)))
+                let l1 = simd_length(restPosition("lowerarm_\(side)") - restPosition("upperarm_\(side)"))
+                let l2 = simd_length(restPosition("hand_\(side)") - restPosition("lowerarm_\(side)"))
+                let elbow = shoulder3D + upperDir * l1
+                driveArm(side, shoulder: shoulder3D, wrist: elbow + torsoFront * l2, pole: elbow + upperDir * 0.1)
+            } else if !frontal, let hold {
+                switch hold {
+                case let .spread(offset):
+                    // Form des Arms wie in der Haltung, von der echten Schulter aus und seitlich versetzt
+                    let base = shoulder3D - point(s.shoulderJoint)
+                    driveArm(side, shoulder: shoulder3D, wrist: point(s.wrist[i]) + base + outward * offset,
+                             pole: point(s.elbow[i]) + base + outward * (offset * 0.5))
+                case let .trunk(grip, width, elbows):
+                    let fist = onTrunk(grip + simd_normalize(restPosition("upperarm_\(side)") * SIMD3(1, 0, 0)) * (width / 2))
+                    let pole = shoulder3D + trunk * simd_normalize(elbows) * 0.3 + outward * 0.08
+                    // Handgelenk so setzen, dass die Faust am Griff liegt (die Hand folgt dem Unterarm)
+                    let offset = Self.fistOffset(left: side == "l")
+                    var target = fist - simd_normalize(fist - shoulder3D) * simd_length(offset)
+                    for _ in 0..<4 {
+                        driveArm(side, shoulder: shoulder3D, wrist: target, pole: pole)
+                        guard let index = model.jointIndex("lowerarm_\(side)"), let w = world[index] else { break }
+                        target = fist - w * rest(index).transpose * offset
+                    }
+                }
+            } else {
+                let upper = dir(arm.1 - arm.0), lower = dir(arm.2 - arm.1)
+                drive("upperarm_\(side)", d0: restDir("upperarm_\(side)", "lowerarm_\(side)"), f0: front,
+                      d1: upper, f1: frontal ? torsoFront : forwardPerp(upper))
+                drive("lowerarm_\(side)", d0: restDir("lowerarm_\(side)", "hand_\(side)"), f0: front,
+                      d1: lower, f1: frontal ? torsoFront : forwardPerp(lower))
+            }
 
             let thigh = dir(leg.1 - leg.0), shin = dir(leg.2 - leg.1)
             let back = -front

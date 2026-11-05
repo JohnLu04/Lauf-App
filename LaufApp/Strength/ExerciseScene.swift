@@ -11,6 +11,11 @@ final class ExerciseScene {
     private var kettlebell: SCNNode?
     private let unit = HumanFigure.unit
 
+    /// Stange auf dem oberen Rücken (Ruhelage): auf dem Trapezmuskel hinter dem Hals
+    static let barRest = SIMD3<Float>(0, 1.471, -0.093)
+    /// Kettlebell-Griff vor der Brust (Ruhelage)
+    static let gobletGrip = SIMD3<Float>(0, 1.38, 0.22)
+
     init?(exercise: StrengthExercise, model: HumanModel? = HumanModel.shared) {
         guard let model else { return nil }
         self.exercise = exercise
@@ -25,22 +30,57 @@ final class ExerciseScene {
         // Hände, die ein Gewicht halten, zur Faust schließen
         let holds = exercise.animation.props.contains { prop in
             switch prop {
-            case .dumbbells, .dumbbell, .kettlebell, .barbellBack: true
+            case .dumbbells, .dumbbell, .kettlebell, .barbellBack, .handPost: true
             default: false
             }
         }
         if holds { figure.grip = true }
+        // Wie die Hände das Gerät halten
+        for prop in exercise.animation.props {
+            switch prop {
+            case .kettlebell:
+                figure.hold = .trunk(Self.gobletGrip, width: 0.13, elbows: SIMD3(0, -1, 0.25))
+            case .barbellBack:
+                figure.hold = .trunk(Self.barRest, width: 0.84, elbows: SIMD3(0, -1, -0.35))
+            case .dumbbells, .dumbbell:
+                // Hanteln hängen neben den Beinen, nicht in den Oberschenkeln
+                if figure.hold == nil { figure.hold = .spread(0.055) }
+            default:
+                break
+            }
+        }
         update(at: 0)
+        for prop in exercise.animation.props {
+            if case .handPost = prop { addHandPost() }
+        }
         frameCamera()
     }
 
     /// Haltung zum Zeitpunkt `time` (Sekunden, in Schleife)
     func update(at time: TimeInterval) {
         figure.apply(exercise.animation.pose(at: time), frontal: exercise.animation.frontal)
-        if let kettlebell, let l = figure.bone("hand_l"), let r = figure.bone("hand_r") {
-            // Kettlebell vor der Brust zwischen beiden Händen
-            kettlebell.simdPosition = (l.simdWorldPosition + r.simdWorldPosition) / 2 + SIMD3(0.04, -0.1, 0)
+        if let kettlebell, let l = fist("hand_l"), let r = fist("hand_r") {
+            // Die Fäuste halten die Hörner des Griffs, die Kugel hängt darunter
+            var width = l - r
+            width.y = 0
+            let across = simd_length(width) > 1e-4 ? simd_normalize(width) : SIMD3<Float>(0, 0, 1)
+            let up = SIMD3<Float>(0, 1, 0)
+            kettlebell.simdOrientation = simd_quatf(simd_float3x3(columns: (across, up, simd_cross(across, up))))
+            kettlebell.simdPosition = (l + r) / 2 - up * Self.kettlebellHandle
         }
+    }
+
+    /// Höhe der Griffhörner über der Mitte der Kugel
+    private static let kettlebellHandle: Float = 0.105
+
+    /// Mitte der Faust einer Hand (Weltkoordinaten)
+    func fist(_ handName: String) -> SIMD3<Float>? {
+        guard let hand = figure.bone(handName), let index = figure.model.jointIndex(handName) else { return nil }
+        let restWorld = figure.model.joints[index].restWorld
+        let offset = HumanFigure.fistOffset(left: restWorld.columns.3.x > 0)
+        let restFist = SIMD4<Float>(restWorld.columns.3.x + offset.x, restWorld.columns.3.y + offset.y, restWorld.columns.3.z + offset.z, 1)
+        let local = restWorld.inverse * restFist
+        return hand.simdConvertPosition(SIMD3(local.x, local.y, local.z), to: nil)
     }
 
     // MARK: Licht und Boden
@@ -125,6 +165,21 @@ final class ExerciseScene {
                 scene.rootNode.addChildNode(box(from: legX, width: 4, bottom: 0, top: height - 7, depth: 0.05, frame))
                 scene.rootNode.addChildNode(box(from: legX - 6, width: 16, bottom: 0, top: 2.5, depth: 0.36, frame))
             }
+        case let .crossBench(x, width, height):
+            // Lang in die Tiefe; etwas mehr nach hinten, damit sie die Figur nicht verdeckt
+            let length: Float = 1.0, center: Float = -0.2
+            let pad = box(from: x, width: width, bottom: height - 7, top: height, depth: length, material(0.13, 0.13, 0.14, rough: 0.7), chamfer: 0.02)
+            pad.simdPosition.z = center
+            scene.rootNode.addChildNode(pad)
+            let frame = material(0.92, 0.92, 0.93, rough: 0.35, metal: 0.3)
+            for z in [center - length / 2 + 0.1, center + length / 2 - 0.1] {
+                let leg = box(from: x + width / 2 - 2, width: 4, bottom: 0, top: height - 7, depth: 0.05, frame)
+                leg.simdPosition.z = z
+                scene.rootNode.addChildNode(leg)
+                let foot = box(from: x - 4, width: width + 8, bottom: 0, top: 2.5, depth: 0.06, frame)
+                foot.simdPosition.z = z
+                scene.rootNode.addChildNode(foot)
+            }
         case let .box(x, width, height):
             scene.rootNode.addChildNode(box(from: x, width: width, bottom: 0, top: height, depth: 0.55,
                                             material(0.80, 0.66, 0.47, rough: 0.8), chamfer: 0.015))
@@ -134,17 +189,21 @@ final class ExerciseScene {
         case .dumbbells:
             attachDumbbell(to: "hand_l")
             attachDumbbell(to: "hand_r")
-        case .dumbbell:
-            attachDumbbell(to: exercise.animation.frontal ? "hand_l" : "hand_r")
+        case let .dumbbell(inFarHand):
+            // Vordere Hand: in der Seitenansicht die rechte, in der Vorderansicht die linke
+            let near = exercise.animation.frontal ? "hand_l" : "hand_r"
+            let far = exercise.animation.frontal ? "hand_r" : "hand_l"
+            attachDumbbell(to: inFarHand ? far : near)
         case .kettlebell:
             let bell = SCNNode()
             let body = SCNSphere(radius: 0.085)
             body.materials = [material(0.12, 0.12, 0.13, rough: 0.45, metal: 0.4)]
             bell.addChildNode(SCNNode(geometry: body))
-            let handle = SCNTorus(ringRadius: 0.06, pipeRadius: 0.014)
+            // Griff: Bogen über der Kugel, die Hörner links und rechts (entlang x)
+            let handle = SCNTorus(ringRadius: 0.065, pipeRadius: 0.014)
             handle.materials = body.materials
             let handleNode = SCNNode(geometry: handle)
-            handleNode.simdPosition = SIMD3(0, 0.08, 0)
+            handleNode.simdPosition = SIMD3(0, Self.kettlebellHandle - 0.035, 0)
             handleNode.simdEulerAngles = SIMD3(.pi / 2, 0, 0)
             bell.addChildNode(handleNode)
             bell.castsShadow = true
@@ -188,7 +247,27 @@ final class ExerciseScene {
             scene.rootNode.addChildNode(node)
             let post = box(from: a.x - 2, width: 4, bottom: 0, top: Body.floor - a.y + 10, depth: 0.05, material(0.9, 0.9, 0.9, rough: 0.4, metal: 0.3))
             scene.rootNode.addChildNode(post)
+        case .handPost:
+            break   // wird nach der ersten Haltung an die Hand gesetzt
         }
+    }
+
+    /// Senkrechte Stange, die die hintere Hand umfasst (z. B. Wandstange beim Wadenheben)
+    private func addHandPost() {
+        let farHand = exercise.animation.frontal ? "hand_r" : "hand_l"
+        guard let grip = fist(farHand) else { return }
+        let height = grip.y + 0.35
+        let rod = SCNCylinder(radius: 0.02, height: CGFloat(height))
+        rod.materials = [material(0.85, 0.85, 0.87, rough: 0.3, metal: 0.8)]
+        let node = SCNNode(geometry: rod)
+        node.simdPosition = SIMD3(grip.x, height / 2, grip.z)
+        node.castsShadow = true
+        scene.rootNode.addChildNode(node)
+        let foot = SCNCylinder(radius: 0.09, height: 0.02)
+        foot.materials = rod.materials
+        let footNode = SCNNode(geometry: foot)
+        footNode.simdPosition = SIMD3(grip.x, 0.01, grip.z)
+        scene.rootNode.addChildNode(footNode)
     }
 
     /// Kurzhantel in der Hand: Griff quer durch die Faust (in der T-Pose von vorn nach hinten)
