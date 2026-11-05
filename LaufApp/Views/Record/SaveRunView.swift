@@ -52,6 +52,7 @@ struct SaveRunView: View {
                     Section { ShoePickerRow(selection: $shoeID) }
                 }
                 PendingPhotosSection(photos: $photos)
+                RunExportSection()
                 Section {
                     Button("Lauf verwerfen", role: .destructive) { confirmDiscard = true }
                 }
@@ -81,6 +82,8 @@ struct SaveRunView: View {
         run.shoeID = shoeID
         context.insert(run)
         try? context.save()
+        let export = RunExportSection.selection
+        RunExporter.shared.export(run, toStrava: export.strava, toHealth: export.health, context: context)
         recorder.clearDraft()
     }
 }

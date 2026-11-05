@@ -31,6 +31,9 @@ struct RootView: View {
                 await StravaSync.shared.syncIfNeeded(context: modelContext)
             }
         }
+        // Ergebnis von „Zu Strava hochladen“ / „In Apple Health speichern“
+        .overlay(alignment: .bottom) { RunExportToast() }
+        .animation(.default, value: RunExporter.shared.message)
         // Während einer Aufzeichnung liegt der Aufnahmebildschirm über allem.
         .fullScreenCover(isPresented: Binding(get: { recorder.isSessionActive }, set: { _ in })) {
             RecordingSessionView()

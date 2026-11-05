@@ -118,6 +118,18 @@ struct RunDetailView: View {
                         showSaveRoute = true
                     }
                 }
+                if RunExport.canUploadToStrava(run), StravaSync.shared.isConnected {
+                    Button("Zu Strava hochladen", systemImage: "arrow.up.circle") {
+                        RunExporter.shared.export(run, toStrava: true, toHealth: false, context: context)
+                    }
+                    .disabled(RunExporter.shared.busy.contains(run.id))
+                }
+                if RunExport.canSaveToHealth(run), HealthSync.isAvailable {
+                    Button("In Apple Health speichern", systemImage: "heart") {
+                        RunExporter.shared.export(run, toStrava: false, toHealth: true, context: context)
+                    }
+                    .disabled(RunExporter.shared.busy.contains(run.id))
+                }
                 if run.stravaID != nil && StravaSync.shared.isConnected {
                     Button("Von Strava aktualisieren", systemImage: "arrow.triangle.2.circlepath") {
                         Task { await refreshFromStrava() }
@@ -308,6 +320,12 @@ struct RunDetailView: View {
     }
 
     private var sourceDescription: String {
+        // Eigene Läufe, die zu Strava hochgeladen bzw. in Apple Health gespeichert wurden
+        if run.source.isEmpty || run.isManual {
+            let origin = run.isManual ? "Von Hand eingetragen" : "Mit LaufApp aufgezeichnet"
+            let targets = [run.stravaID != nil ? "Strava" : nil, run.healthID != nil ? "Apple Health" : nil].compactMap { $0 }
+            return targets.isEmpty ? origin : origin + ", geteilt mit " + targets.joined(separator: " und ")
+        }
         let health = run.healthSourceName.isEmpty ? "Apple Health" : "Apple Health (\(run.healthSourceName))"
         switch (run.isFromStrava || run.stravaID != nil, run.isFromHealth || run.healthID != nil) {
         case (true, true): return "Importiert aus Strava und \(health)"

@@ -105,6 +105,7 @@ struct ManualRunView: View {
                 }
 
                 PendingPhotosSection(photos: $photos)
+                RunExportSection()
 
                 if let workout = plannedWorkout {
                     Section {
@@ -187,6 +188,8 @@ struct ManualRunView: View {
         run.shoeID = shoeID
         context.insert(run)
         try? context.save()
+        let export = RunExportSection.selection
+        RunExporter.shared.export(run, toStrava: export.strava, toHealth: export.health, context: context)
         dismiss()
     }
 

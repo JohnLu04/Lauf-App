@@ -82,6 +82,29 @@ struct StravaSettingsView: View {
         }
 
         Section {
+            if strava.canUpload {
+                Label("Hochladen erlaubt", systemImage: "arrow.up.circle.fill").foregroundStyle(.green)
+            } else {
+                Button {
+                    Task { await connect() }
+                } label: {
+                    HStack {
+                        Label("Hochladen erlauben", systemImage: "arrow.up.circle")
+                        Spacer()
+                        if isConnecting { ProgressView() }
+                    }
+                }
+                .disabled(isConnecting)
+            }
+        } header: {
+            Text("Läufe hochladen")
+        } footer: {
+            Text(strava.canUpload
+                 ? "Läufe, die du mit LaufApp aufzeichnest oder einträgst, kannst du beim Speichern oder in der Laufansicht (⋯) zu Strava hochladen."
+                 : "Damit LaufApp deine Läufe zu Strava hochladen kann, bestätige bei Strava einmal die Erlaubnis „Aktivitäten erstellen“. Bisher importierte Läufe bleiben erhalten.")
+        }
+
+        Section {
             Button {
                 Task { await repair() }
             } label: {

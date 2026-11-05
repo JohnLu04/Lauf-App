@@ -21,6 +21,9 @@ final class StravaSync {
         case notConnected
         case rateLimited
         case http(Int)
+        case missingWritePermission
+        case uploadFailed(String)
+        case uploadTimeout
 
         var errorDescription: String? {
             switch self {
@@ -31,6 +34,9 @@ final class StravaSync {
             case .rateLimited: "Strava-Limit erreicht. Die restlichen Läufe werden beim nächsten Synchronisieren importiert."
             case let .http(code) where code == 401: "Strava hat die Anmeldung abgelehnt (401). Prüfe Client-ID und Client-Secret und verbinde dich erneut."
             case let .http(code): "Strava hat mit Fehler \(code) geantwortet. Versuch es später noch einmal."
+            case .missingWritePermission: "Zum Hochladen braucht LaufApp bei Strava die Erlaubnis, Aktivitäten zu erstellen. Tippe in den Strava-Einstellungen auf „Hochladen erlauben“."
+            case let .uploadFailed(message): "Strava konnte den Lauf nicht übernehmen: \(message)"
+            case .uploadTimeout: "Strava verarbeitet den Lauf noch. Er erscheint gleich in Strava und wird beim nächsten Synchronisieren verknüpft."
             }
         }
     }
@@ -81,6 +87,9 @@ final class StravaSync {
 
     var athleteName: String? { defaults.string(forKey: "strava.athleteName") }
 
+    /// Darf LaufApp Läufe hochladen? (Ältere Verbindungen haben nur Leserechte und müssen neu erlaubt werden.)
+    var canUpload: Bool { isConnected && (defaults.string(forKey: "strava.scope") ?? "").contains("activity:write") }
+
     /// Beim ersten Synchronisieren werden die Läufe dieser letzten Tage importiert.
     var initialImportDays: Int {
         get { defaults.object(forKey: "strava.initialDays") as? Int ?? 30 }
@@ -109,7 +118,7 @@ final class StravaSync {
             URLQueryItem(name: "redirect_uri", value: Self.redirectURI),
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "approval_prompt", value: "auto"),
-            URLQueryItem(name: "scope", value: "read,activity:read_all"),
+            URLQueryItem(name: "scope", value: "read,activity:read_all,activity:write"),
         ]
         return components.url
     }
@@ -122,6 +131,8 @@ final class StravaSync {
         guard let code = item("code") else { throw SyncError.denied }
         guard let scope = item("scope"), scope.contains("activity:read") else { throw SyncError.missingScope }
         let response = try await requestToken(["code": code, "grant_type": "authorization_code"])
+        // Erteilte Rechte merken (Hochladen nur mit „activity:write“)
+        defaults.set(scope, forKey: "strava.scope")
         let name = [response.athlete?.firstname, response.athlete?.lastname].compactMap { $0 }.joined(separator: " ")
         defaults.set(name.isEmpty ? nil : name, forKey: "strava.athleteName")
         lastError = nil
@@ -137,6 +148,7 @@ final class StravaSync {
         }
         Keychain.set(nil, for: tokensKey)
         defaults.removeObject(forKey: "strava.athleteName")
+        defaults.removeObject(forKey: "strava.scope")
         defaults.removeObject(forKey: "strava.gearBackfill")
         defaults.removeObject(forKey: "strava.gearRefresh")
         syncedUntil = nil
@@ -188,6 +200,112 @@ final class StravaSync {
         case 404: return nil
         case 429: throw SyncError.rateLimited
         case let code: throw SyncError.http(code)
+        }
+    }
+
+    // MARK: - Hochladen
+
+    private struct CreatedActivity: Decodable { let id: Int }
+
+    private struct UploadStatus: Decodable {
+        let id: Int
+        let error: String?
+        let activityId: Int?
+    }
+
+    /// Lädt einen in LaufApp aufgezeichneten oder eingetragenen Lauf zu Strava hoch und verknüpft ihn
+    /// (damit er beim Synchronisieren nicht doppelt importiert wird). Mit GPS-Strecke als GPX-Datei,
+    /// eingetragene Läufe ohne echte Aufzeichnung als manuelle Aktivität (ohne Karte).
+    func upload(_ run: Run) async throws {
+        guard canUpload else { throw SyncError.missingWritePermission }
+        let activityID: Int
+        if run.isManual || run.route.count < 2 {
+            let created: CreatedActivity = try await send("POST", "/activities", form: [
+                "name": run.title,
+                "sport_type": "Run",
+                "start_date_local": Self.localTimestamp(run.startDate),
+                "elapsed_time": String(Int(max(run.elapsedTime, run.movingTime).rounded())),
+                "distance": String(format: "%.1f", run.distance),
+                "description": run.notes,
+            ])
+            activityID = created.id
+        } else {
+            activityID = try await uploadGPX(run)
+            // Sportart sicherheitshalber festlegen (GPX-Dateien enthalten sie nur als Hinweis)
+            let _: CreatedActivity? = try? await send("PUT", "/activities/\(activityID)", form: ["sport_type": "Run"])
+        }
+        run.stravaID = activityID
+    }
+
+    private func uploadGPX(_ run: Run) async throws -> Int {
+        let boundary = "LaufApp-\(UUID().uuidString)"
+        var body = Data()
+        func field(_ name: String, _ value: String) {
+            body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(name)\"\r\n\r\n\(value)\r\n".utf8))
+        }
+        field("data_type", "gpx")
+        field("name", run.title)
+        field("description", run.notes)
+        field("external_id", "laufapp-\(run.id.uuidString).gpx")
+        body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"laufapp.gpx\"\r\nContent-Type: application/gpx+xml\r\n\r\n".utf8))
+        body.append(RunExport.gpx(for: run))
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+
+        var status: UploadStatus = try await send("POST", "/uploads", body: body,
+                                                  contentType: "multipart/form-data; boundary=\(boundary)")
+        // Strava verarbeitet die Datei im Hintergrund; etwa eine Minute auf das Ergebnis warten
+        for _ in 0..<30 {
+            if let id = status.activityId { return id }
+            if let error = status.error {
+                // Schon vorhanden (z. B. zweimal hochgeladen): mit der bestehenden Aktivität verknüpfen
+                if let range = error.range(of: #"activities/(\d+)"#, options: .regularExpression),
+                   let id = Int(error[range].dropFirst("activities/".count)) {
+                    return id
+                }
+                throw SyncError.uploadFailed(error.replacingOccurrences(of: #"<[^>]+>"#, with: "", options: .regularExpression))
+            }
+            try await Task.sleep(for: .seconds(2))
+            guard let next: UploadStatus = try await get("/uploads/\(status.id)") else { break }
+            status = next
+        }
+        throw SyncError.uploadTimeout
+    }
+
+    /// Ortszeit ohne Zeitzone, wie Strava sie für `start_date_local` erwartet
+    private static func localTimestamp(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        return formatter.string(from: date)
+    }
+
+    private func send<T: Decodable>(_ method: String, _ path: String, form: [String: String]) async throws -> T {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        let body = form.map { key, value in
+            "\(key)=\(value.addingPercentEncoding(withAllowedCharacters: allowed) ?? "")"
+        }.joined(separator: "&")
+        return try await send(method, path, body: Data(body.utf8), contentType: "application/x-www-form-urlencoded")
+    }
+
+    private func send<T: Decodable>(_ method: String, _ path: String, body: Data, contentType: String) async throws -> T {
+        var request = URLRequest(url: URL(string: "https://www.strava.com/api/v3" + path)!)
+        request.httpMethod = method
+        request.httpBody = body
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(try await accessToken())", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        switch code {
+        case 200, 201: return try StravaImport.decoder.decode(T.self, from: data)
+        case 429: throw SyncError.rateLimited
+        case 401, 403:
+            // Fehlende Schreibrechte meldet Strava mit einem Hinweis auf „write“
+            if String(decoding: data, as: UTF8.self).contains("write") { throw SyncError.missingWritePermission }
+            throw SyncError.http(code)
+        default:
+            throw SyncError.http(code)
         }
     }
 

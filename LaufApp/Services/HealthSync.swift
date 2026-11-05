@@ -15,6 +15,7 @@ final class HealthSync {
     enum SyncError: LocalizedError {
         case missingEntitlement
         case unavailable
+        case writeDenied
 
         var errorDescription: String? {
             switch self {
@@ -22,6 +23,8 @@ final class HealthSync {
                 "Diese Installation der App hat keine Berechtigung für Apple Health. Beim Installieren (z. B. mit Sideloadly) muss die HealthKit-Berechtigung erhalten bleiben."
             case .unavailable:
                 "Apple Health ist auf diesem Gerät nicht verfügbar."
+            case .writeDenied:
+                "LaufApp darf keine Trainings in Apple Health speichern. Erlauben kannst du es in der Health-App unter Profil → Apps → LaufApp."
             }
         }
     }
