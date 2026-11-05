@@ -428,9 +428,10 @@ final class HumanFigure {
         }
         func limbJoints(_ limb: Limb, root: String, original: (CGPoint, CGPoint, CGPoint), l1: Double, l2: Double)
             -> (CGPoint, CGPoint, CGPoint) {
-            guard frontal, case let .reach(_, bend) = limb else { return original }
+            guard frontal, case let .reach(target, bend) = limb else { return original }
             let start = plane(point(s.hip) + trunk * (restPosition(root) - hipMid))
-            let (mid, end) = Skeleton.solve(.reach(original.2, bend: bend), root: start, l1: l1, l2: l2, offset: 0)
+            // Zum eigentlichen Ziel lösen: Liegt es außer Reichweite, bleibt das Glied gestreckt
+            let (mid, end) = Skeleton.solve(.reach(target, bend: bend), root: start, l1: l1, l2: l2, offset: 0)
             return (start, mid, end)
         }
 
@@ -555,11 +556,36 @@ final class HumanFigure {
         let name = joint.name
         guard ["index", "middle", "ring", "pinky", "thumb"].contains(where: name.hasPrefix), !name.contains("leaf") else { return nil }
         let left = name.hasSuffix("_l")
-        let isThumb = name.hasPrefix("thumb")
-        let angle: Float = (isThumb ? 35 : (name.contains("_01_") ? 75 : 85)) * .pi / 180
+        let restRotation = rotation(joint.restWorld)
+        if name.hasPrefix("thumb") {
+            return thumbCurl(name, left: left, restRotation: restRotation)
+        }
+        let angle: Float = (name.contains("_01_") ? 75 : 85) * .pi / 180
         let worldAxis = SIMD3<Float>(0, 0, left ? -1 : 1)
-        let localAxis = rotation(joint.restWorld).transpose * worldAxis
+        let localAxis = restRotation.transpose * worldAxis
         return simd_float3x3(simd_quatf(angle: angle, axis: simd_normalize(localAxis)))
+    }
+
+    /// Daumen um den Griff legen: Das Grundglied zeigt quer unter die gebeugten Finger (wie bei einer
+    /// Faust um eine Stange), die Endglieder beugen sich leicht zur Handfläche.
+    private func thumbCurl(_ name: String, left: Bool, restRotation: simd_float3x3) -> simd_float3x3? {
+        let side = left ? "l" : "r"
+        func restPoint(_ joint: String) -> SIMD3<Float>? {
+            model.jointIndex(joint).map { model.joints[$0].restWorld.columns.3 }.map { SIMD3($0.x, $0.y, $0.z) }
+        }
+        guard let hand = restPoint("hand_\(side)"), let base = restPoint("thumb_01_\(side)"),
+              let tip = restPoint("thumb_04_leaf_\(side)") else { return nil }
+        let mirror: Float = left ? -1 : 1
+        if name.hasPrefix("thumb_01") {
+            // Daumenspitze unter dem Mittelglied von Zeige- und Mittelfinger (Achsen der Ruhelage, rechte Hand)
+            let target = hand + SIMD3(-0.108 * mirror, -0.07, 0.004)
+            let rotationToTarget = simd_float3x3(simd_quatf(from: simd_normalize(tip - base), to: simd_normalize(target - base)))
+            return restRotation.transpose * rotationToTarget * restRotation
+        }
+        // Beugen um die Achse quer zum Daumen und zur Handfläche (die Handfläche zeigt in der Ruhelage nach unten)
+        let axis = simd_normalize(simd_cross(simd_normalize(tip - base), SIMD3<Float>(0, -1, 0)))
+        let angle: Float = (name.hasPrefix("thumb_02") ? 18 : 25) * .pi / 180
+        return simd_float3x3(simd_quatf(angle: -angle * mirror, axis: simd_normalize(restRotation.transpose * axis)))
     }
 }
 

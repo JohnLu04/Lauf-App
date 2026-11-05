@@ -436,10 +436,10 @@ extension StrengthExercise {
         animation: ExerciseAnimation(
             frames: [
                 Pose(hip: CGPoint(x: 110, y: 142), torso: -84.5, head: 0, nearLeg: .reach(CGPoint(x: 196, y: 138.5), bend: upward),
-                     farLeg: .reach(CGPoint(x: 182, y: 180), bend: upward),
+                     farLeg: .reach(CGPoint(x: 192, y: 182), bend: upward),
                      nearArm: .angles(84, 88), farArm: .forearmSupport(0)),
                 Pose(hip: CGPoint(x: 110, y: 142), torso: -84.5, head: 0, nearLeg: .reach(CGPoint(x: 196, y: 138.5), bend: upward),
-                     farLeg: .reach(CGPoint(x: 194, y: 156), bend: upward),
+                     farLeg: .reach(CGPoint(x: 198, y: 156), bend: upward),
                      nearArm: .angles(84, 88), farArm: .forearmSupport(0)),
             ],
             holds: [0.5, 1.2], moves: [1.1, 1.1], props: [.mat(x: 30, width: 150), .crossBench(x: 182, width: 30, height: 42)], frontal: true))
@@ -615,7 +615,7 @@ extension StrengthExercise {
                 Pose(hip: CGPoint(x: 104, y: 127), torso: 40, nearLeg: .reach(flat(122), bend: forward), farLeg: .reach(flat(125), bend: forward),
                      nearArm: .angles(-55, -40), farArm: .angles(-58, -44)),
                 Pose(hip: CGPoint(x: 165, y: 60), torso: 25, nearLeg: .angles(82, -22), farLeg: .angles(79, -25),
-                     nearArm: .angles(150, 168), farArm: .angles(146, 165), nearFoot: 100, farFoot: 100),
+                     nearArm: .angles(108, 126), farArm: .angles(104, 122), nearFoot: 100, farFoot: 100),
                 Pose(hip: CGPoint(x: 197, y: 96), torso: 35, nearLeg: .reach(CGPoint(x: 214, y: 130), bend: forward), farLeg: .reach(CGPoint(x: 217, y: 130), bend: forward),
                      nearArm: .angles(70, 90), farArm: .angles(66, 86)),
                 Pose(hip: CGPoint(x: 208, y: 48), torso: 3, nearLeg: .reach(CGPoint(x: 214, y: 130), bend: forward), farLeg: .reach(CGPoint(x: 217, y: 130), bend: forward),
